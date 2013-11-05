@@ -25,7 +25,22 @@ for subject in subjects:
         if os.path.exists(dir_) == False:
             os.mkdir(dir_)
 
+    """
     # copy the data
     src_ =  os.path.join(source_dir, subject)
     src_file = glob.glob(os.path.join(src_, 'anat/anat*.nii'))[0]
     shutil.copy(src_file, t1_dir)
+    """
+
+    # should be put elsewhere, but launch recon_all now and here
+    # export SUBJECTS_DIR=''
+    anat_image = glob.glob(os.path.join(t1_dir, 'anat*.nii'))[0]
+    from nipype.caching import Memory
+    mem = Memory(base_dir=subject_dir)
+    from nipype.interfaces.freesurfer import ReconAll
+    reconall =  mem.cache(ReconAll)
+    recon_result = reconall(subject_id = subject, 
+                            directive='all', 
+                            subjects_dir = t1_dir,
+                            T1_files = anat_image)
+    
