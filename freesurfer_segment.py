@@ -1,4 +1,7 @@
-""" This scripts copies data to some working directory
+""" 
+Launch freesurfer segmentation on the subjects of the dataset
+
+Author: Bertrand Thirion, 2013
 
 export SUBJECTS_DIR=''
 """

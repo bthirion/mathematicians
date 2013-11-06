@@ -1,4 +1,7 @@
-""" This scripts copies data to some working directory
+""" 
+This scripts copies data to some working directory
+
+Author: Bertrand Thirion, 2013
 """
 import os
 import glob
