@@ -11,7 +11,7 @@ subjects =  ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
              'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
              'll130242', 'el120268', 
              'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-             'mh120250', 'vb120409', 'jc130030', 'mk130199']
+             'mh120250', 'vb120409', 'jc130030', 'mk130199'][:1]
 
 if os.path.exists(write_dir) == False:
     os.mkdir(write_dir)
@@ -25,22 +25,41 @@ for subject in subjects:
         if os.path.exists(dir_) == False:
             os.mkdir(dir_)
 
-    """
-    # copy the data
+    # copy the t1 data
     src_ =  os.path.join(source_dir, subject)
     src_file = glob.glob(os.path.join(src_, 'anat/anat*.nii'))[0]
     shutil.copy(src_file, t1_dir)
-    """
 
-    # should be put elsewhere, but launch recon_all now and here
-    # export SUBJECTS_DIR=''
-    anat_image = glob.glob(os.path.join(t1_dir, 'anat*.nii'))[0]
-    from nipype.caching import Memory
-    mem = Memory(base_dir=subject_dir)
-    from nipype.interfaces.freesurfer import ReconAll
-    reconall =  mem.cache(ReconAll)
-    recon_result = reconall(subject_id = subject, 
-                            directive='all', 
-                            subjects_dir = t1_dir,
-                            T1_files = anat_image)
+    # copy the fMRI data
+    
+    # audiosentence
+    src_ =  os.path.join(source_dir, subject, 'fMRI/audiosentence')
+    src_files = glob.glob(os.path.join(src_, 'audio*.nii'))
+    out_ = os.path.join(fmri_dir, 'audiosentence')
+    if os.path.exists(out_) == False:
+            os.mkdir(out_)
+    for src_file in src_files:
+        shutil.copy(src_file, out_)
+    
+    # localizer
+    src_ =  os.path.join(source_dir, subject, 'fMRI/localizer')
+    src_files = glob.glob(os.path.join(src_, 'localizer*.nii'))
+    out_ = os.path.join(fmri_dir, 'localizer')
+    if os.path.exists(out_) == False:
+            os.mkdir(out_)
+    for src_file in src_files:
+        shutil.copy(src_file, out_)
+    
+    # visualcategs
+    src_ =  os.path.join(source_dir, subject, 'fMRI/visualcategs')
+    src_files = glob.glob(os.path.join(src_, 'visu*.nii'))
+    out_ = os.path.join(fmri_dir, 'visualcategs')
+    if os.path.exists(out_) == False:
+            os.mkdir(out_)
+    for src_file in src_files:
+        shutil.copy(src_file, out_)
+                          
+
+
+
     
