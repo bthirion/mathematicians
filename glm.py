@@ -1,12 +1,27 @@
 """
 Implement the level-1 GLM on a subject by subject basis
 
+For the moment, this is done in the volume
+
+todo
+----
+* simplify, separate out code 
+* add more contrasts
+* fixed effects
+* replace motion files by those of pypreprocess
+
 Author: Bertrand Thirion, 2013
 """
 import os
 import glob
 import numpy as np
 from scipy.io import loadmat
+import matplotlib.pyplot as plt
+from nibabel import load, save, Nifti1Image
+
+from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
+from nipy.modalities.fmri.design_matrix import make_dmtx
+from nipy.modalities.fmri.glm import FMRILinearModel
 
 
 subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
@@ -17,23 +32,63 @@ subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
             'mh120250', 'vb120409', 'jc130030', 'mk130199'][:1]
 
 work_dir = '/neurospin/tmp/mathematicians'
-spm_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/fMRI_data/'
+spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
+                       'mathematicians_Amalric_Dehaene2012/fMRI_data/')
 
+# some fixed parameters
+tr = 1.5 # TR
+hrf_model = 'canonical'  # hemodynamic reponse function
+drift_model = 'cosine'   # drift model 
+hfcut = 128              # low frequency cut
+motion_names = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'] # motion param identifiers
+
+
+def make_mask(fmri_files):
+    """ Generate a mask from a set of fMRI files"""
+    from nipy.labs.mask import compute_mask
+    mean = None
+    for fmri_file in fmri_files:
+        if mean == None:
+            mean = load(fmri_file).get_data().mean(-1)
+            affine = load(fmri_file).get_affine()
+        else:
+            mean += load(fmri_file).get_data().mean(-1)
+
+    mask_img = Nifti1Image(compute_mask(mean), affine)
+    return mask_img
+    
 
 for subject in subjects:
+    # necessary paths
+    analysis_dir = os.path.join(spm_dir, subject, 'analyses')
     subject_dir = os.path.join(work_dir, subject)
     fmri_dir = os.path.join(subject_dir, 'fmri')
-    analysis_dir = os.path.join(spm_dir, subject, 'analyses')
-    
+    result_dir = os.path.join(fmri_dir, 'results')
+    if os.path.exists(result_dir) == False:
+        os.mkdir(result_dir)
+
     # audiosentence protocol
-    # step1: create the paradigm
+    # step 1: get the necessary files
     onset_dir = os.path.join(analysis_dir, 'audiosentence')
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
-    motion_param = glob.glob(
-        os.path.join(spm_dir, 'fMRI/audiosentence/rp*.txt'))
+    motion_files = glob.glob(
+        os.path.join(spm_dir, subject, 'fMRI/audiosentence/rp*.txt'))
+    fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*.nii.gz'))
     onset_files.sort()
-    motion_param.sort()
-    for onset_file in onset_files:
+    motion_files.sort()
+    fmri_files.sort()
+    
+    # scan times
+    n_scans = 200
+    frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
+    
+    # mask image
+    mask = make_mask(fmri_files)
+    save(mask, os.path.join(fmri_dir, 'mask.nii'))
+    
+    for (onset_file, motion_file, fmri_file) in zip(
+        onset_files, motion_files, fmri_files):
+        # step 2: [in each session] create the paradigm
         paradigm_data = loadmat(onset_file)
         durations = np.concatenate(
             [x.ravel() for x in paradigm_data['durations'][0]])
@@ -41,9 +96,47 @@ for subject in subjects:
             [x.ravel() for x in paradigm_data['onsets'][0]])
         names = np.concatenate(
             [x.ravel() for x in paradigm_data['names'][0]]).astype(str)
-        names = np.concatenate((names[:-3], np.repeat(names[-3:], 15)))
+        names = np.concatenate((names[:-3], np.repeat(names[-3:], 16)))
+        paradigm = BlockParadigm(names, onsets, durations)
+        # step 3: add motion regressors and low frequencies
+        # and create the design matrix
+        motion_params = np.loadtxt(motion_file)
+        dmtx = make_dmtx(frametimes, paradigm, hrf_model=hrf_model,
+                         drift_model=drift_model, hfcut=hfcut,
+                         add_regs=motion_params, add_reg_names=motion_names)
 
-    # step 2: create the design matrix
-    
+        ax = dmtx.show()
+        ax.set_position([.05, .25, .9, .65])
+        ax.set_title('Design matrix')
+
+        names_ = np.array(dmtx.names)
+
+        # step 4 specify the contrasts
+        contrasts = {}
+        audio = np.array([name[-4:] == 'reg1' for name in names_], np.float)
+        contrasts['audio'] = audio / audio.sum()
+        visual = np.array([name[-6:] == 'signal' for name in names_], np.float)
+        contrasts['visual'] = visual/ visual.sum()
+        motor = np.array([name == 'key press' for name in names_], np.float)
+        contrasts['motor'] = motor
+        reflection = np.array([name[-4:] == 'reg2' for name in names_],
+                              np.float)
+        contrasts['reflection'] = reflection / reflection.sum()
         
-    # step 3: fit the GLM
+        # step 5: fit the GLM
+        fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
+        fmri_glm.fit(do_scaling=True, model='ar1')
+    
+        # Estimate the contrasts
+        print('Computing contrasts...')
+        for index, contrast_id in enumerate(contrasts):
+            print('  Contrast % i out of %i: %s' %
+                  (index + 1, len(contrasts), contrast_id))
+            # save the z_image
+            z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
+            z_map, = fmri_glm.contrast(
+                contrasts[contrast_id], con_id=contrast_id, output_z=True)
+            save(z_map, z_map_path)
+        del fmri_glm
+
+plt.show()

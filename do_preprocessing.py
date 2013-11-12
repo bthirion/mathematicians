@@ -1,5 +1,9 @@
 """ Perform the preprcessing in a pure Python implementation
 
+Note 
+----
+* requires joblib 0.6.5
+
 Author: Bertrand thirion, Michael Eickenberg, 2013
 """
 import os
