@@ -39,4 +39,5 @@ if __name__ == "__main__":
         }
 
         do_subject_preproc(preproc_dict, concat=False, do_coreg=True,
-                           do_stc=False, do_cv_tc=True, do_realign=True)
+                           do_stc=False, do_cv_tc=True, do_realign=True,
+                           do_report=False)
