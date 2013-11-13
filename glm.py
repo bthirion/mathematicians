@@ -18,6 +18,7 @@ import numpy as np
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from nibabel import load, save, Nifti1Image
+from joblib import Memory
 
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 from nipy.modalities.fmri.design_matrix import make_dmtx
@@ -37,10 +38,55 @@ spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf',
 
 # some fixed parameters
 tr = 1.5 # TR
-hrf_model = 'canonical'  # hemodynamic reponse function
-drift_model = 'cosine'   # drift model 
-hfcut = 128              # low frequency cut
-motion_names = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'] # motion param identifiers
+
+    
+def audiosentence_paradigm(onset_file):
+    """utility for audiosentence paradigm creation from the matlab onset file"""
+    paradigm_data = loadmat(onset_file)
+    durations = np.concatenate(
+        [x.ravel() for x in paradigm_data['durations'][0]])
+    onsets = np.concatenate(
+        [x.ravel() for x in paradigm_data['onsets'][0]])
+    names = np.concatenate(
+        [x.ravel() for x in paradigm_data['names'][0]]).astype(str)
+    names = np.concatenate((names[:-3], np.repeat(names[-3:], 16)))
+    return BlockParadigm(names, onsets, durations)
+
+
+def audiosentence_dmtx(onset_file, motion_file, n_scans):
+    """Utility for ceating a design matrix from onset and motion files"""
+    # Some default parameters
+    hrf_model = 'canonical'  # hemodynamic reponse function
+    drift_model = 'cosine'   # drift model 
+    hfcut = 128              # low frequency cut
+    motion_names = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'] 
+    # motion param identifiers
+    frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
+
+    paradigm = audiosentence_paradigm(onset_file)
+    
+    # add motion regressors and low frequencies
+    # and create the design matrix
+    motion_params = np.loadtxt(motion_file)
+    dmtx = make_dmtx(frametimes, paradigm, hrf_model=hrf_model,
+                     drift_model=drift_model, hfcut=hfcut,
+                     add_regs=motion_params, add_reg_names=motion_names)
+    return dmtx
+
+def audiosentence_contrasts(names_):
+    """Create the contrasts,
+    given the names of the columns of the design matrix"""
+    contrasts = {}
+    audio = np.array([name[-4:] == 'reg1' for name in names_], np.float)
+    contrasts['audio'] = audio / audio.sum()
+    visual = np.array([name[-6:] == 'signal' for name in names_], np.float)
+    contrasts['visual'] = visual/ visual.sum()
+    motor = np.array([name == 'key press' for name in names_], np.float)
+    contrasts['motor'] = motor
+    reflection = np.array([name[-4:] == 'reg2' for name in names_],
+                          np.float)
+    contrasts['reflection'] = reflection / reflection.sum()
+    return contrasts
 
 
 def make_mask(fmri_files):
@@ -57,7 +103,8 @@ def make_mask(fmri_files):
     mask_img = Nifti1Image(compute_mask(mean, opening=3).astype(np.uint8),
                            affine)
     return mask_img
-    
+
+
 
 for subject in subjects:
     # necessary paths
@@ -67,6 +114,7 @@ for subject in subjects:
     result_dir = os.path.join(fmri_dir, 'results')
     if os.path.exists(result_dir) == False:
         os.mkdir(result_dir)
+    memory = Memory(cachedir=os.path.join(fmri_dir, 'cache_dir'), verbose=0)
 
     # audiosentence protocol
     # step 1: get the necessary files
@@ -81,52 +129,21 @@ for subject in subjects:
     
     # scan times
     n_scans = 200
-    frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
-    
+
     # mask image
-    mask_img = os.path.join(fmri_dir, 'mask.nii')
-    if os.path.exists(mask_img):
-        mask = load(mask_img)
-    else:
-        mask = make_mask(fmri_files)
-        save(mask, os.path.join(fmri_dir, 'mask.nii'))
+    make_mask = memory.cache(make_mask)
+    mask = make_mask(fmri_files)
+    save(mask, os.path.join(fmri_dir, 'mask.nii'))
     
     for (onset_file, motion_file, fmri_file) in zip(
         onset_files, motion_files, fmri_files):
-        # step 2: [in each session] create the paradigm
-        paradigm_data = loadmat(onset_file)
-        durations = np.concatenate(
-            [x.ravel() for x in paradigm_data['durations'][0]])
-        onsets = np.concatenate(
-            [x.ravel() for x in paradigm_data['onsets'][0]])
-        names = np.concatenate(
-            [x.ravel() for x in paradigm_data['names'][0]]).astype(str)
-        names = np.concatenate((names[:-3], np.repeat(names[-3:], 16)))
-        paradigm = BlockParadigm(names, onsets, durations)
-        # step 3: add motion regressors and low frequencies
-        # and create the design matrix
-        motion_params = np.loadtxt(motion_file)
-        dmtx = make_dmtx(frametimes, paradigm, hrf_model=hrf_model,
-                         drift_model=drift_model, hfcut=hfcut,
-                         add_regs=motion_params, add_reg_names=motion_names)
-
+        # Create the design matrix
+        dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans)
         ax = dmtx.show()
         ax.set_position([.05, .25, .9, .65])
         ax.set_title('Design matrix')
 
-        names_ = np.array(dmtx.names)
-
-        # step 4 specify the contrasts
-        contrasts = {}
-        audio = np.array([name[-4:] == 'reg1' for name in names_], np.float)
-        contrasts['audio'] = audio / audio.sum()
-        visual = np.array([name[-6:] == 'signal' for name in names_], np.float)
-        contrasts['visual'] = visual/ visual.sum()
-        motor = np.array([name == 'key press' for name in names_], np.float)
-        contrasts['motor'] = motor
-        reflection = np.array([name[-4:] == 'reg2' for name in names_],
-                              np.float)
-        contrasts['reflection'] = reflection / reflection.sum()
+        contrasts = audiosentence_contrasts(dmtx.names)
         
         # step 5: fit the GLM
         fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
