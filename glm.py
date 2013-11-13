@@ -54,7 +54,8 @@ def make_mask(fmri_files):
         else:
             mean += load(fmri_file).get_data().mean(-1)
 
-    mask_img = Nifti1Image(compute_mask(mean), affine)
+    mask_img = Nifti1Image(compute_mask(mean, opening=3).astype(np.uint8),
+                           affine)
     return mask_img
     
 
@@ -83,8 +84,12 @@ for subject in subjects:
     frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
     
     # mask image
-    mask = make_mask(fmri_files)
-    save(mask, os.path.join(fmri_dir, 'mask.nii'))
+    mask_img = os.path.join(fmri_dir, 'mask.nii')
+    if os.path.exists(mask_img):
+        mask = load(mask_img)
+    else:
+        mask = make_mask(fmri_files)
+        save(mask, os.path.join(fmri_dir, 'mask.nii'))
     
     for (onset_file, motion_file, fmri_file) in zip(
         onset_files, motion_files, fmri_files):
