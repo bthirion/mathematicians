@@ -5,7 +5,6 @@ For the moment, this is done in the volume
 
 todo
 ----
-* simplify, separate out code 
 * add more contrasts
 * fixed effects
 * replace motion files by those of pypreprocess
@@ -38,7 +37,6 @@ spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf',
 
 # some fixed parameters
 tr = 1.5 # TR
-
     
 def audiosentence_paradigm(onset_file):
     """utility for audiosentence paradigm creation from the matlab onset file"""
@@ -89,6 +87,31 @@ def audiosentence_contrasts(names_):
     return contrasts
 
 
+def fixed_effects(con_imgs, var_imgs, mask_img):
+    """Compute the fixed effets given array of first-level effects and variance
+    """
+    tiny = 1.e-16
+    con, var = [], []
+    mask = mask_img.get_data().astype(np.bool)
+    for (con_img, var_img) in zip(con_imgs, var_imgs):
+        con.append(con_img.get_data()[mask])
+        var.append(var_img.get_data()[mask])
+
+    con, var = np.asarray(con), np.asarray(var)
+    var = np.maximum(var, tiny)
+    prec = 1./ var
+    ffx_con = np.sum(con * prec, 0) * 1./ np.sum(prec, 0)
+    ffx_var = 1./ np.sum(prec, 0)
+    ffx_stat = ffx_con / np.sqrt(ffx_var)
+    arrays = [ffx_con, ffx_var, ffx_stat]
+    outputs = []
+    for array in arrays:
+        vol = mask.astype(np.float)
+        vol[mask] = array
+        outputs.append(Nifti1Image(vol, mask_img.get_affine()))
+    return outputs
+
+
 def make_mask(fmri_files):
     """ Generate a mask from a set of fMRI files"""
     from nipy.labs.mask import compute_mask
@@ -103,7 +126,6 @@ def make_mask(fmri_files):
     mask_img = Nifti1Image(compute_mask(mean, opening=3).astype(np.uint8),
                            affine)
     return mask_img
-
 
 
 for subject in subjects:
@@ -135,6 +157,9 @@ for subject in subjects:
     mask = make_mask(fmri_files)
     save(mask, os.path.join(fmri_dir, 'mask.nii'))
     
+    effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    design_matrices = []
     for (onset_file, motion_file, fmri_file) in zip(
         onset_files, motion_files, fmri_files):
         # Create the design matrix
@@ -142,23 +167,46 @@ for subject in subjects:
         ax = dmtx.show()
         ax.set_position([.05, .25, .9, .65])
         ax.set_title('Design matrix')
-
-        contrasts = audiosentence_contrasts(dmtx.names)
-        
-        # step 5: fit the GLM
+        design_matrices.append(dmtx.matrix)
+        session_contrasts = audiosentence_contrasts(dmtx.names)
+         
+        # fit the GLM
         fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
         fmri_glm.fit(do_scaling=True, model='ar1')
-    
         # Estimate the contrasts
         print('Computing contrasts...')
-        for index, contrast_id in enumerate(contrasts):
+        for index, contrast_id in enumerate(session_contrasts):
             print('  Contrast % i out of %i: %s' %
-                  (index + 1, len(contrasts), contrast_id))
+                  (index + 1, len(session_contrasts), contrast_id))
             # save the z_image
-            z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
-            z_map, = fmri_glm.contrast(
-                contrasts[contrast_id], con_id=contrast_id, output_z=True)
-            save(z_map, z_map_path)
+            con, var = fmri_glm.contrast(
+                session_contrasts[contrast_id], con_id=contrast_id, 
+                output_z=False, output_effects=True, output_variance=True)
+            effects[contrast_id].append(con)
+            variances[contrast_id].append(var)
         del fmri_glm
+    
+    for index, contrast_id in enumerate(session_contrasts):
+        _, _, z_map = fixed_effects(
+            effects[contrast_id], variances[contrast_id], mask)
+        z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
+        save(z_map, z_map_path)
+    
 
+    """
+    multi_session_model = FMRILinearModel(fmri_files, design_matrices, mask)
+    multi_session_model.fit()
+    for index, contrast_id in enumerate(ffx_contrasts):
+        print('  Contrast % i out of %i: %s' %
+              (index + 1, len(ffx_contrasts), contrast_id))
+        # save the z_image
+        z_map, = multi_session_model.contrast(
+            ffx_contrasts[contrast_id], con_id=contrast_id, output_z=True)
+        z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
+        save(z_map, z_map_path)
+    del multi_session_model
+    """
+        
+        
+    
 plt.show()
