@@ -14,7 +14,8 @@ First run: export SUBJECTS_DIR=''
 import os
 import glob
 import commands
-from nibabel import load, save, Nifti1Image
+# from nibabel import load, save, Nifti1Image
+import gzip
 
 FWHM = 5.
 
@@ -32,8 +33,7 @@ for subject in subjects:
     subject_dir = os.path.join(work_dir, subject)
     t1_dir = os.path.join(subject_dir, 't1')
     fmri_dir = os.path.join(subject_dir, 'fmri')
-    # anat_image = glob.glob(os.path.join(t1_dir, 'anat*.nii'))[0]
-    fmri_images = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii'))
+    fmri_images = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii.gz'))
     fmri_images += glob.glob(os.path.join(fmri_dir, 'craudio*.nii.gz'))
     fmri_images += glob.glob(os.path.join(fmri_dir, 'crloc*.nii.gz'))
 
@@ -46,9 +46,17 @@ for subject in subjects:
     for fmri_session in fmri_images:
         # output names
         # the .gii files will be put in the same directory as the input fMRI
-        left_fmri_tex = fmri_session[:-4] + '_lh.gii' 
-        right_fmri_tex = fmri_session[:-4] + '_rh.gii'
+        left_fmri_tex = fmri_session[:-7] + '_lh.gii' 
+        right_fmri_tex = fmri_session[:-7] + '_rh.gii'
         print left_fmri_tex, right_fmri_tex
+
+        # unzip the fMRI data
+        fmri_file = fmri_session[:-3]
+        f_in = gzip.open(fmri_session, 'rb')
+        f_out = open(fmri_file, 'wb')
+        f_out.writelines(f_in)
+        f_out.close()
+        f_in.close()
 
         # run freesrufer command
         commands.getoutput(
@@ -60,5 +68,7 @@ for subject in subjects:
             '$FREESURFER_HOME/bin/mri_vol2surf --src %s --o %s '\
                 '--out_type gii --regheader %s --hemi rh --projfrac 0.5'
             % (fmri_session, right_fmri_tex, fs_dir))
-  
-
+        
+        # delete the nii file
+        os.remove(fmri_file)
+     
