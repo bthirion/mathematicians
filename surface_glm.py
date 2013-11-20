@@ -47,19 +47,23 @@ for subject in subjects:
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/audiosentence/rp*.txt'))
-    fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*_lh.gii'))
+    left_fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*_lh.gii'))
+    right_fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*_rh.gii'))
     onset_files.sort()
     motion_files.sort()
-    fmri_files.sort()
+    left_fmri_files.sort()
+    right_fmri_files.sort()
     
     # scan times
     n_scans = 200
     
-    effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
-    variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    lh_effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    lh_variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    rh_effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    rh_variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
     design_matrices = []
-    for (onset_file, motion_file, fmri_file) in zip(
-        onset_files, motion_files, fmri_files):
+    for (onset_file, motion_file, left_fmri_file, right_fmri_file) in zip(
+        onset_files, motion_files, left_fmri_files, right_fmri_files):
         # Create the design matrix
         dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr)
         ax = dmtx.show()
@@ -67,11 +71,11 @@ for subject in subjects:
         ax.set_title('Design matrix')
         design_matrices.append(dmtx.matrix)
         session_contrasts = audiosentence_contrasts(dmtx.names)
-         
-        # load the data
-        Y = np.array([darrays.data for darrays in read(fmri_file).darrays])
-        # fit the GLM
         fmri_glm = GeneralLinearModel(dmtx.matrix)
+
+        # left hemisphere
+        Y = np.array([darrays.data for darrays in read(left_fmri_file).darrays])
+        # fit the GLM
         fmri_glm.fit(Y, model='ar1')
         # Estimate the contrasts
         print('Computing contrasts...')
@@ -80,16 +84,36 @@ for subject in subjects:
                   (index + 1, len(session_contrasts), contrast_id))
             # save the z_image
             contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
-            effects[contrast_id].append(contrast_.effect.ravel())
-            variances[contrast_id].append(contrast_.variance.ravel())
-        del fmri_glm
+            lh_effects[contrast_id].append(contrast_.effect.ravel())
+            lh_variances[contrast_id].append(contrast_.variance.ravel())
+        
+        # right hemisphere
+        Y = np.array(
+            [darrays.data for darrays in read(right_fmri_file).darrays])
+        # fit the GLM
+        fmri_glm.fit(Y, model='ar1')
+        # Estimate the contrasts
+        for index, contrast_id in enumerate(session_contrasts):
+            # save the z_image
+            contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
+            rh_effects[contrast_id].append(contrast_.effect.ravel())
+            rh_variances[contrast_id].append(contrast_.variance.ravel())
+        
     
     for index, contrast_id in enumerate(session_contrasts):
+        # left hemisphere
         _, _, z_map = fixed_effects(
-            effects[contrast_id], variances[contrast_id])
+            lh_effects[contrast_id], lh_variances[contrast_id])
         z_texture = GiftiImage(
             darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
         z_map_path = os.path.join(result_dir, '%s_z_map_lh.gii' % contrast_id)
+        write(z_texture, z_map_path)
+        # right hemisphere
+        _, _, z_map = fixed_effects(
+            rh_effects[contrast_id], rh_variances[contrast_id])
+        z_texture = GiftiImage(
+            darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
+        z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
         
         
