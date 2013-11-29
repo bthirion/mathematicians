@@ -14,7 +14,7 @@ from joblib import Memory
 from nipy.modalities.fmri.glm import GeneralLinearModel
 from utils import (
     audiosentence_paradigm, audiosentence_dmtx, audiosentence_contrasts,
-    fixed_effects, make_mask)
+    fixed_effects, make_mask, define_contrast_audiosentence)
 from nibabel.gifti import read, write, GiftiDataArray, GiftiImage
 
 subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
@@ -27,9 +27,13 @@ subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
 work_dir = '/neurospin/tmp/mathematicians'
 spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
                        'mathematicians_Amalric_Dehaene2012/fMRI_data/')
+behavioral_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/behavioral_data/'
+from scipy.io import loadmat
 
 # some fixed parameters
 tr = 1.5 # TR
+
+contrast_names = []
 
 for subject in subjects:
     # necessary paths
@@ -54,23 +58,32 @@ for subject in subjects:
     left_fmri_files.sort()
     right_fmri_files.sort()
     
+    ### get the ratings of the trials
+    final_data = os.path.join(behavioral_dir, subject,
+                               'finaldata_%s.mat' %subject)
+    fd = loadmat(final_data)
+    response_questionnaire = fd['response_questionnaire']
+    correspondence = fd['correspondance_final']
+    vrai, faux, meaningless = define_contrast_audiosentence(
+        response_questionnaire, correspondence)
+    ratings = [vrai, faux, meaningless]
+    ###
+    
+    
     # scan times
     n_scans = 200
-    
-    lh_effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
-    lh_variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
-    rh_effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
-    rh_variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    lh_effects, lh_variances, rh_effects, rh_variances = {}, {}, {}, {}
     design_matrices = []
-    for (onset_file, motion_file, left_fmri_file, right_fmri_file) in zip(
-        onset_files, motion_files, left_fmri_files, right_fmri_files):
+    for i, (onset_file, motion_file, left_fmri_file, right_fmri_file) in\
+            enumerate(zip(
+            onset_files, motion_files, left_fmri_files, right_fmri_files)):
         # Create the design matrix
         dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr)
         ax = dmtx.show()
         ax.set_position([.05, .25, .9, .65])
         ax.set_title('Design matrix')
         design_matrices.append(dmtx.matrix)
-        session_contrasts = audiosentence_contrasts(dmtx.names)
+        session_contrasts = audiosentence_contrasts(dmtx.names, ratings, i)
         fmri_glm = GeneralLinearModel(dmtx.matrix)
 
         # left hemisphere
@@ -84,20 +97,30 @@ for subject in subjects:
                   (index + 1, len(session_contrasts), contrast_id))
             # save the z_image
             contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
-            lh_effects[contrast_id].append(contrast_.effect.ravel())
-            lh_variances[contrast_id].append(contrast_.variance.ravel())
+            if i == 0:
+                lh_effects[contrast_id] = [contrast_.effect.ravel()]
+                lh_variances[contrast_id] = [contrast_.variance.ravel()]
+            else:
+                lh_effects[contrast_id].append(contrast_.effect.ravel())
+                lh_variances[contrast_id].append(contrast_.variance.ravel())
         
         # right hemisphere
         Y = np.array(
             [darrays.data for darrays in read(right_fmri_file).darrays])
         # fit the GLM
         fmri_glm.fit(Y, model='ar1')
+
         # Estimate the contrasts
+        
         for index, contrast_id in enumerate(session_contrasts):
             # save the z_image
             contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
-            rh_effects[contrast_id].append(contrast_.effect.ravel())
-            rh_variances[contrast_id].append(contrast_.variance.ravel())
+            if i == 0:
+                rh_effects[contrast_id] = [contrast_.effect.ravel()]
+                rh_variances[contrast_id] = [contrast_.variance.ravel()]
+            else:
+                rh_effects[contrast_id].append(contrast_.effect.ravel())
+                rh_variances[contrast_id].append(contrast_.variance.ravel())
         
     
     for index, contrast_id in enumerate(session_contrasts):
