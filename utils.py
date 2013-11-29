@@ -237,6 +237,7 @@ def define_contrast_audiosentence(response_questionnaire, correspondence):
      negative_visu_meaningless) = formatted_matrix(
         value_type == 0, understood_level, intuition_level, immediacy_level,
         visual_imagery_level, mode)
+
     # FXME: should be: 
     vrai = np.array([
         0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0,
