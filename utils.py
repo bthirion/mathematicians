@@ -358,3 +358,45 @@ def localizer_contrasts(dmtx):
     contrasts["reading-visual"] = contrasts["sentences"] * 2 - \
         contrasts["damier_H"] - contrasts["damier_V"]
     return contrasts
+
+
+def visualcateg_paradigm(onset_file):
+    paradigm_data = loadmat(onset_file) 
+    onsets = np.concatenate(
+        [x for x in paradigm_data['onsets'][0]])
+    n_repet = onsets.shape[1]
+    durations = np.concatenate(
+        [x.repeat(n_repet) for x in paradigm_data['durations'][0]])
+    names = np.concatenate(
+        [x.repeat(n_repet) for x in paradigm_data['names'][0]]).astype(str)
+    onsets = onsets.ravel()
+    return BlockParadigm(names, onsets, durations)
+    
+
+def visualcategs_dmtx(onset_file, motion_file, n_scans, tr):
+    hrf_model = 'canonical'  # hemodynamic reponse function
+    drift_model = 'cosine'   # drift model 
+    hfcut = 128              # low frequency cut
+    motion_names = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'] 
+    # motion param identifiers
+    frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
+
+    paradigm = visualcateg_paradigm(onset_file)
+    
+    # add motion regressors and low frequencies
+    # and create the design matrix
+    motion_params = np.loadtxt(motion_file)
+    dmtx = make_dmtx(frametimes, paradigm, hrf_model=hrf_model,
+                     drift_model=drift_model, hfcut=hfcut,
+                     add_regs=motion_params, add_reg_names=motion_names)
+    return dmtx
+
+def visualcategs_contrasts(names):
+    contrasts = {}
+    contrasts['symbols-rest'] = np.array(
+        [name in ['eq', 'mot', 'nb'] for name in names])
+    contrasts['pictures-rest'] = np.array(
+        [name in ['outils', 'maison', 'body', 'visage'] for name in names])
+    contrasts['symbols-pictures'] = contrasts['symbols-rest'] -\
+        contrasts['pictures-rest']
+    return contrasts

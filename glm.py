@@ -25,7 +25,8 @@ from nipy.modalities.fmri.glm import FMRILinearModel
 
 from utils import (
     audiosentence_paradigm, audiosentence_dmtx, audiosentence_contrasts,
-    fixed_effects_img, make_mask, localizer_dmtx, localizer_contrasts)
+    fixed_effects_img, make_mask, localizer_dmtx, localizer_contrasts,
+    visualcategs_dmtx, visualcategs_contrasts)
 
 subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
             'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
@@ -108,6 +109,7 @@ for subject in subjects:
     
     #########################################################################
     # localizer protocol
+    """
     # get the necessary files
     motion_file, = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
@@ -135,12 +137,55 @@ for subject in subjects:
         z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
         save(z_image, z_map_path)
     del fmri_glm
-    
+    """
     #########################################################################
-    # visual protocol
-    
+    # visualcategs protocol
+    onset_dir = os.path.join(analysis_dir, 'visualcategs')
+    onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
+    motion_files = glob.glob(
+        os.path.join(spm_dir, subject, 'fMRI/visualcategs/rp*.txt'))
+    fmri_files = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii.gz'))
+    onset_files.sort()
+    motion_files.sort()
+    fmri_files.sort()
 
-        
+    # scan times
+    n_scans = 185
+    cnames = ['symbols-rest', 'pictures-rest', 'symbols-pictures']
+    effects = {key:[] for key in cnames}
+    variances = {key:[] for key in cnames}
+    design_matrices = []
+    for (onset_file, motion_file, fmri_file) in zip(
+        onset_files, motion_files, fmri_files):
+        # Create the design matrix
+        dmtx = visualcategs_dmtx(onset_file, motion_file, n_scans, tr)
+        ax = dmtx.show()
+        ax.set_position([.05, .25, .9, .65])
+        ax.set_title('Design matrix')
+        design_matrices.append(dmtx.matrix)
+        session_contrasts = visualcategs_contrasts(dmtx.names)
+         
+        # fit the GLM
+        fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
+        fmri_glm.fit(do_scaling=True, model='ar1')
+        # Estimate the contrasts
+        print('Computing contrasts...')
+        for index, contrast_id in enumerate(session_contrasts):
+            print('  Contrast % i out of %i: %s' %
+                  (index + 1, len(session_contrasts), contrast_id))
+            # save the z_image
+            con, var = fmri_glm.contrast(
+                session_contrasts[contrast_id], con_id=contrast_id, 
+                output_z=False, output_effects=True, output_variance=True)
+            effects[contrast_id].append(con)
+            variances[contrast_id].append(var)
+        del fmri_glm
+    
+    for index, contrast_id in enumerate(session_contrasts):
+        _, _, z_map = fixed_effects_img(
+            effects[contrast_id], variances[contrast_id], mask)
+        z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
+        save(z_map, z_map_path)
         
     
 plt.show()
