@@ -14,7 +14,7 @@ from joblib import Memory
 from nipy.modalities.fmri.glm import GeneralLinearModel
 from utils import (
     audiosentence_paradigm, audiosentence_dmtx, audiosentence_contrasts,
-    fixed_effects, make_mask, define_contrast_audiosentence)
+    fixed_effects, make_mask, define_contrast_audiosentence, make_ratings)
 from nibabel.gifti import read, write, GiftiDataArray, GiftiImage
 
 subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
@@ -58,17 +58,10 @@ for subject in subjects:
     left_fmri_files.sort()
     right_fmri_files.sort()
     
-    ### get the ratings of the trials
+    # get the ratings of the trials
     final_data = os.path.join(behavioral_dir, subject,
                                'finaldata_%s.mat' %subject)
-    fd = loadmat(final_data)
-    response_questionnaire = fd['response_questionnaire']
-    correspondence = fd['correspondance_final']
-    vrai, faux, meaningless = define_contrast_audiosentence(
-        response_questionnaire, correspondence)
-    ratings = [vrai, faux, meaningless]
-    ###
-    
+    ratings = make_ratings(final_data)
     
     # scan times
     n_scans = 200

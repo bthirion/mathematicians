@@ -274,3 +274,13 @@ def define_contrast_audiosentence(response_questionnaire, correspondence):
         0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     
     return vrai, faux, meaningless
+
+
+def make_ratings(final_data):
+    fd = loadmat(final_data)
+    response_questionnaire = fd['response_questionnaire']
+    correspondence = fd['correspondance_final']
+    vrai, faux, meaningless = define_contrast_audiosentence(
+        response_questionnaire, correspondence)
+    ratings = [vrai, faux, meaningless]
+    return ratings
