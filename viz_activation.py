@@ -29,7 +29,7 @@ subject_dir = os.path.join(work_dir, subject)
 t1_dir = os.path.join(subject_dir, 't1')
 surf_dir = os.path.join(t1_dir, subject, 'surf')
 fun_dir = os.path.join(subject_dir, 'fmri/results')
-contrast = 'visual' # 'true-false' #'audio' # 'motor' # 'reflection' #
+contrast = 'right-left' # 'visual' # 'true-false' #'audio' # 'motor' # 'reflection' #
 
 THRESHOLD = 3.
 

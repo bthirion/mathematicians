@@ -14,7 +14,8 @@ from joblib import Memory
 from nipy.modalities.fmri.glm import GeneralLinearModel
 from utils import (
     audiosentence_paradigm, audiosentence_dmtx, audiosentence_contrasts,
-    fixed_effects, make_mask, define_contrast_audiosentence, make_ratings)
+    fixed_effects, make_mask, define_contrast_audiosentence, make_ratings,
+    localizer_dmtx, localizer_contrasts)
 from nibabel.gifti import read, write, GiftiDataArray, GiftiImage
 
 subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
@@ -28,7 +29,6 @@ work_dir = '/neurospin/tmp/mathematicians'
 spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
                        'mathematicians_Amalric_Dehaene2012/fMRI_data/')
 behavioral_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/behavioral_data/'
-from scipy.io import loadmat
 
 # some fixed parameters
 tr = 1.5 # TR
@@ -44,7 +44,7 @@ for subject in subjects:
     if os.path.exists(result_dir) == False:
         os.mkdir(result_dir)
     memory = Memory(cachedir=os.path.join(fmri_dir, 'cache_dir'), verbose=0)
-
+    """
     # audiosentence protocol
     # step 1: get the necessary files
     onset_dir = os.path.join(analysis_dir, 'audiosentence')
@@ -131,7 +131,56 @@ for subject in subjects:
             darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
         z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
-        
-        
+    """
+    #########################################################################
+    # localizer protocol
+    # get the necessary files
+    motion_file, = glob.glob(
+        os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
+    left_fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*_lh.gii'))[0]
+    right_fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*_rh.gii'))[0]
+    n_scans = 205
+
+    # Create the design matrix
+    dmtx = localizer_dmtx(motion_file, n_scans, tr)
+    ax = dmtx.show()
+    ax.set_position([.05, .25, .9, .65])
+    ax.set_title('Design matrix')
+    session_contrasts = localizer_contrasts(dmtx)
+    fmri_glm = GeneralLinearModel(dmtx.matrix)
+    
+    # left hemisphere
+    Y = np.array([darrays.data for darrays in read(left_fmri_file).darrays])
+    # fit the GLM
+    fmri_glm.fit(Y, model='ar1')
+    # Estimate the contrasts
+    print('Computing contrasts...')
+    for index, contrast_id in enumerate(session_contrasts):
+        print('  Contrast % i out of %i: %s' %
+              (index + 1, len(session_contrasts), contrast_id))
+        # save the z_image
+        contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
+        z_map = contrast_.z_score()
+        z_texture = GiftiImage(
+            darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
+        z_map_path = os.path.join(result_dir, '%s_z_map_lh.gii' % contrast_id)
+        write(z_texture, z_map_path)
+
+    # right hemisphere
+    Y = np.array([darrays.data for darrays in read(right_fmri_file).darrays])
+    # fit the GLM
+    fmri_glm.fit(Y, model='ar1')
+    # Estimate the contrasts
+    print('Computing contrasts...')
+    for index, contrast_id in enumerate(session_contrasts):
+        print('  Contrast % i out of %i: %s' %
+              (index + 1, len(session_contrasts), contrast_id))
+        # save the z_image
+        contrast_ = fmri_glm.contrast(session_contrasts[contrast_id])
+        z_map = contrast_.z_score()
+        z_texture = GiftiImage(
+            darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
+        z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
+        write(z_texture, z_map_path)
     
 plt.show()
