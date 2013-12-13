@@ -148,7 +148,7 @@ for subject in subjects:
     onset_files.sort()
     motion_files.sort()
     fmri_files.sort()
-
+    
     # scan times
     n_scans = 185
     cnames = ['symbols-rest', 'pictures-rest', 'symbols-pictures']
