@@ -14,22 +14,25 @@ from nipy.labs import viz3d
 from nipy.labs.viz import cm
 import commands
 
-subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
-            'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
-            'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
-            'll130242', 'el120268', 
-            'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-            'mh120250', 'vb120409', 'jc130030', 'mk130199']
+subjects = ['cf120444','jl120341','lr120300','aa130114','aa130169','mk130199',
+            'jl130200','mp130263','rm130241','al130244','bm120103','ce130459',
+            'of140017','jf140025','cr140040','fm120345','hr120357','kg120369',
+            'mr120371','jc130030','ld130145','cf140022','jn140034','mv140024',
+            'tj140029','ap140030','af140169','pp140165','eb140248','gq140243'][:1]            
 
-work_dir = '/neurospin/tmp/mathematicians'
+
+work_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/Surface_analysis/mathematicians'
 
 subject = subjects[0]
+
+os.environ['SUBJECTS_DIR'] = ""
 
 subject_dir = os.path.join(work_dir, subject)
 t1_dir = os.path.join(subject_dir, 't1')
 surf_dir = os.path.join(t1_dir, subject, 'surf')
 fun_dir = os.path.join(subject_dir, 'fmri/results')
-contrast = 'right-left' # 'visual' # 'true-false' #'audio' # 'motor' # 'reflection' #
+#contrast = 'math - nonmath' # 'visual' # 'true-false' #'audio' # 'motor' # 'reflection' #
+contrast = 'faces-others'
 
 THRESHOLD = 3.
 
@@ -59,11 +62,22 @@ for hemisphere in ['l', 'r']:
 
 # Plot the MRI image on top of the meshes
 ref = os.path.join(t1_dir, subject, 'mri/orig.mgz')
-norig = commands.getoutput('mri_info --vox2ras %s' %ref)
+norig = commands.getoutput('$FREESURFER_HOME/bin/mri_info --vox2ras %s' %ref)
+print norig
 norig = np.array([x.split() for x in norig.split('\n')]).astype(np.float)
-torig = commands.getoutput('mri_info --vox2ras-tkr %s' %ref)
+torig = commands.getoutput('$FREESURFER_HOME/bin/mri_info --vox2ras-tkr %s' %ref)
+print torig
 torig = np.array([x.split() for x in torig.split('\n')]).astype(np.float)
 aff = np.linalg.inv(np.dot(norig, np.linalg.inv(torig)))
+
+
+# Plot the MRI image on top of the meshes
+#ref = os.path.join(t1_dir, subject, 'mri/orig.mgz')
+#norig = commands.getoutput('mri_info --vox2ras %s' %ref)
+#norig = np.array([x.split() for x in norig.split('\n')]).astype(np.float)
+#torig = commands.getoutput('mri_info --vox2ras-tkr %s' %ref)
+#torig = np.array([x.split() for x in torig.split('\n')]).astype(np.float)
+#aff = np.linalg.inv(np.dot(norig, np.linalg.inv(torig)))
 
 vol_file = os.path.join(fun_dir, '%s_z_map.nii' % contrast)
 data_ = load(vol_file).get_data()

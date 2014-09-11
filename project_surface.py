@@ -17,25 +17,44 @@ import commands
 # from nibabel import load, save, Nifti1Image
 import gzip
 
+
 FWHM = 5.
 
 # get subject list and subject informations
-subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
-            'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
-            'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
-            'll130242', 'el120268', 
-            'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-            'mh120250', 'vb120409', 'jc130030', 'mk130199'][:1]
+subjects = ['cf120444','jl120341','lr120300','aa130114','aa130169','mk130199',
+            'jl130200','mp130263','rm130241','al130244','bm120103','ce130459',
+            'of140017','jf140025','cr140040','fm120345','hr120357','kg120369',
+            'mr120371','jc130030','ld130145','cf140022','jn140034','mv140024',
+            'tj140029','ap140030','af140169','pp140165','eb140248','gq140243'][1:]         
 
-work_dir = '/neurospin/tmp/mathematicians'
+#work_dir = '/neurospin/tmp/mathematicians'
+
+work_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/Surface_analysis/mathematicians'
+spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
+                       'mathematicians_Amalric_Dehaene2012/fMRI_data/')
+
+os.environ['SUBJECTS_DIR'] = ""
 
 for subject in subjects:
+    print "Subject :", subject
     subject_dir = os.path.join(work_dir, subject)
     t1_dir = os.path.join(subject_dir, 't1')
     fmri_dir = os.path.join(subject_dir, 'fmri')
-    fmri_images = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii.gz'))
-    fmri_images += glob.glob(os.path.join(fmri_dir, 'craudio*.nii.gz'))
-    fmri_images += glob.glob(os.path.join(fmri_dir, 'crloc*.nii.gz'))
+#    preproc_dir = os.path.join(fmri_dir, 'tmp')
+    preproc_dir = os.path.join(spm_dir,subject,'fMRI')
+    
+#    fmri_images = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii.gz'))
+#    fmri_images = glob.glob(os.path.join(preproc_dir, 'craudio*.nii.gz'))
+#    fmri_images += glob.glob(os.path.join(preproc_dir, 'crloc*.nii.gz'))    # old names
+
+#    fmri_images = glob.glob(os.path.join(preproc_dir, 'Coregvisu*.nii.gz'))
+#    fmri_images += glob.glob(os.path.join(preproc_dir, 'Coregaudio*.nii.gz'))
+#    fmri_images += glob.glob(os.path.join(preproc_dir, 'Coregloc*.nii.gz'))   # new names
+
+    fmri_images = glob.glob(os.path.join(preproc_dir,'visualcategs/wavisu*.nii'))
+    fmri_images += glob.glob(os.path.join(preproc_dir,'audiosentence/waaudio*.nii'))
+    fmri_images += glob.glob(os.path.join(preproc_dir,'localizer/walocalizer*.nii'))
+
 
     fs_dir = os.path.join(t1_dir, subject)
 
@@ -52,7 +71,8 @@ for subject in subjects:
 
         # unzip the fMRI data
         fmri_file = fmri_session[:-3]
-        f_in = gzip.open(fmri_session, 'rb')
+#        f_in = gzip.open(fmri_session, 'rb')
+        f_in = open(fmri_session, 'rb')
         f_out = open(fmri_file, 'wb')
         f_out.writelines(f_in)
         f_out.close()

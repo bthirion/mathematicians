@@ -8,13 +8,19 @@ import glob
 import shutil
 
 source_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/fMRI_data/'
-write_dir = '/neurospin/tmp/mathematicians'
-subjects =  ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
-             'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
-             'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
-             'll130242', 'el120268', 
-             'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-             'mh120250', 'vb120409', 'jc130030', 'mk130199']
+write_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/Surface_analysis/mathematicians'
+#subjects =  ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
+#             'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
+#             'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
+#             'll130242', 'el120268', 
+#             'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
+#             'mh120250', 'vb120409', 'jc130030', 'mk130199'
+#            'cf140022', 'jf140025', 'of140017', 'tj140029']
+
+#subjects = ['jn140034', 'cr140040', 'mv140024'], 'ap140030''af140169', 
+
+subjects = ['eb140248','gq140243', 'pp140165']
+
 
 if os.path.exists(write_dir) == False:
     os.mkdir(write_dir)

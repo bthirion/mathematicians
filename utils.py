@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb 11 14:08:50 2014
+
+@author: mamalric
+"""
+
 """ Utility functions for GLM analysis
 
 Author: Bertrand Thirion, 2013
@@ -6,12 +13,77 @@ Author: Bertrand Thirion, 2013
 import numpy as np
 from scipy.io import loadmat
 from nibabel import load, Nifti1Image
+import operator
 
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 from nipy.modalities.fmri.design_matrix import make_dmtx
 
 
+def audiosentence_paradigm(datfile, n_run):
 
+    run_data = loadmat(datfile) 
+    n_trials = run_data['nb_trials'][0][0]  
+    correspondence = run_data['correspondance_final']
+    sentence_type = np.mod(correspondence[:,1], 15) # number in [0;14] for the 15 different types
+    session_indexes = np.arange(n_run * n_trials, (n_run + 1)* n_trials)
+    	
+    all_onsets = np.concatenate(
+        [x.ravel() for x in run_data['time_data'][session_indexes]])
+    sentence_type_for_this_run = sentence_type[session_indexes]
+	
+    names = [""]*33
+    durations = np.zeros(30)   
+    onsets = np.zeros(30)   
+	   
+    i_regressor = -1
+    for i_stim in range(n_trials):
+        ind = np.where(sentence_type_for_this_run == i_stim)[0][0]
+        if i_stim == 0: 
+            names[28] = 'trial_15_reg1' 
+            names[29] = 'trial_15_reg2' 
+            onsets[28] = all_onsets[ind*6] 
+            onsets[29] = all_onsets[ind*6 + 1]
+            durations[28] = all_onsets[ind*6 + 1] - all_onsets[ind*6]
+            durations[29] = all_onsets[ind*6 + 3] - all_onsets[ind*6 + 1]
+			
+        else:
+            for i_onset in range(1,3):
+                i_regressor = i_regressor + 1
+                names[i_regressor] = "trial_%02d_reg%d" % (i_stim, i_onset) 
+                if i_onset == 1:
+                    onsets[i_regressor] = all_onsets[ind*6]  # onsets are already saved after subtraction of the TTL clock onset
+                    durations[i_regressor] = all_onsets[ind*6 + 1] - all_onsets[ind*6]
+                elif i_onset == 2: # starts at sentence OFFSET, ends at the response
+                    onsets[i_regressor] = all_onsets[ind*6 + 1]
+                    durations[i_regressor] = all_onsets[ind*6 + 3] - all_onsets[ind*6 + 1]
+               
+    i_regressor = i_regressor +3
+    names[i_regressor] = 'alert signal'
+    onsets_recup = []
+    [onsets_recup.append(all_onsets[i_stim*6 + 5]) for i_stim in range(n_trials)]
+    onsets = np.concatenate((onsets, np.array(onsets_recup)),0)
+    durations = np.concatenate((durations, 0.1*np.ones(n_trials)),0)
+            
+    i_regressor = i_regressor +1
+    names[i_regressor] = 'response signal'
+    onsets_recup = []
+    [onsets_recup.append(all_onsets[i_stim*6 + 2]) for i_stim in range(n_trials)]    
+    onsets = np.concatenate((onsets, np.array(onsets_recup)),0)
+    durations = np.concatenate((durations, 0.1*np.ones(n_trials)),0)
+            
+    i_regressor = i_regressor +1
+    names[i_regressor] = 'key press'
+    onsets_recup = []
+    [onsets_recup.append(all_onsets[i_stim*6 + 3]) for i_stim in range(n_trials)]
+    onsets = np.concatenate((onsets, np.array(onsets_recup)),0)
+    durations = np.concatenate((durations, 0.1*np.ones(n_trials)),0)
+    
+    names = np.concatenate((names[:-3], np.repeat(names[-3:], n_trials)))
+    
+    return BlockParadigm(names, onsets, durations)
+   
+  
+'''
 def audiosentence_paradigm(onset_file):
     """utility for audiosentence paradigm creation from the matlab onset file"""
     paradigm_data = loadmat(onset_file)
@@ -23,9 +95,9 @@ def audiosentence_paradigm(onset_file):
         [x.ravel() for x in paradigm_data['names'][0]]).astype(str)
     names = np.concatenate((names[:-3], np.repeat(names[-3:], 16)))
     return BlockParadigm(names, onsets, durations)
+'''
 
-
-def audiosentence_dmtx(onset_file, motion_file, n_scans, tr):
+def audiosentence_dmtx(datfile, motion_file, n_scans, tr, n_run):
     """Utility for ceating a design matrix from onset and motion files"""
     # Some default parameters
     hrf_model = 'canonical'  # hemodynamic reponse function
@@ -35,7 +107,8 @@ def audiosentence_dmtx(onset_file, motion_file, n_scans, tr):
     # motion param identifiers
     frametimes = np.linspace(0, (n_scans - 1) * tr, n_scans)
 
-    paradigm = audiosentence_paradigm(onset_file)
+    paradigm = audiosentence_paradigm(datfile, n_run)
+    #paradigm = audiosentence_paradigm(onset_file)
     
     # add motion regressors and low frequencies
     # and create the design matrix
@@ -46,7 +119,7 @@ def audiosentence_dmtx(onset_file, motion_file, n_scans, tr):
     return dmtx
 
 
-def audiosentence_contrasts(names_, ratings, n_session):
+def audiosentence_contrasts(names_, final_data, n_session):
     """Create the contrasts,
     given the names of the columns of the design matrix
 
@@ -54,21 +127,64 @@ def audiosentence_contrasts(names_, ratings, n_session):
     ratings: list of arrays,
              high-level variables describing the trials 
     """
-    vrai, faux, meaningless = ratings
-    n_reg = len(vrai) / 6  # assumes that  there are 6 eqaully length sessions
+    ratings = define_contrast_audiosentence(final_data)
+
+    n_reg = len(ratings[0]) / 6  # assumes that  there are 6 eqaully length sessions
 
     # keep only the values relavant for the session that you are considering
     session_indexes = np.arange(n_session * n_reg, (n_session + 1)* n_reg)
-    vrai, faux, meaningless = (
-        vrai[session_indexes], faux[session_indexes],
-        meaningless[session_indexes])
+    (vrai, faux, meaningless, meaningful, math, language, math_true, math_false, math_meaningless, math_meaningful, 
+    analyse_true, analyse_false, analyse_meaningless, algebra_true, algebra_false, algebra_meaningless, topo_true,
+    topo_false, topo_meaningless, geo_true, geo_false, geo_meaningless, nonmath_true, nonmath_false, nonmath_meaningless,
+    analyse_meaningful, algebra_meaningful, topo_meaningful, geo_meaningful, nonmath_meaningful, math_intuitive, 
+    math_nonintuitive, math_imagery, math_nonimagery) = (
+        [np.array(ratings[x])[session_indexes] for x in range(len(ratings))])    
+        
+#        ratings[0][session_indexes], ratings[1][session_indexes],
+#        ratings[2][session_indexes], ratings[3][session_indexes], 
+#        ratings[4][session_indexes], ratings[5][session_indexes], 
+#        ratings[6][session_indexes], ratings[7][session_indexes], 
+#        ratings[8][session_indexes], ratings[9][session_indexes], 
+#        ratings[10][session_indexes], ratings[11][session_indexes], 
+#        ratings[12][session_indexes], ratings[13][session_indexes], 
+#        ratings[14][session_indexes], ratings[15][session_indexes], 
+#        ratings[16][session_indexes], ratings[17][session_indexes], 
+#        ratings[18][session_indexes], ratings[19][session_indexes], 
+#        ratings[20][session_indexes], ratings[21][session_indexes], 
+#        ratings[22][session_indexes], ratings[23][session_indexes], 
+#        ratings[24][session_indexes], ratings[25][session_indexes], 
+#        ratings[26][session_indexes], ratings[27][session_indexes], 
+#        ratings[28][session_indexes], ratings[29][session_indexes], 
+#        ratings[30][session_indexes], ratings[31][session_indexes],
+#        ratings[32][session_indexes], ratings[33][session_indexes])
+#        
+#[   
+        
     # Caveat: assumes that  names_ order is:
     # 'alert signal', 'key press', 'response signal',  'trial_01_ ...
     reordering = np.concatenate((np.arange(30, 33), np.arange(30), 
                                 np.arange(33, 39)))
 
-    vrai, faux, meaningless = (vrai[reordering], faux[reordering], 
-                               meaningless[reordering])
+    (vrai, faux, meaningless, meaningful, math, language, math_true, math_false, math_meaningless, math_meaningful, 
+    analyse_true, analyse_false, analyse_meaningless, algebra_true, algebra_false, algebra_meaningless, topo_true,
+    topo_false, topo_meaningless, geo_true, geo_false, geo_meaningless, nonmath_true, nonmath_false, nonmath_meaningless,
+    analyse_meaningful, algebra_meaningful, topo_meaningful, geo_meaningful, nonmath_meaningful, math_intuitive, 
+    math_nonintuitive, math_imagery, math_nonimagery) = (
+        vrai[reordering], faux[reordering], meaningless[reordering], 
+        meaningful[reordering], math[reordering], language[reordering], math_true[reordering], 
+        math_false[reordering], math_meaningless[reordering], math_meaningful[reordering], 
+        analyse_true[reordering], analyse_false[reordering], 
+        analyse_meaningless[reordering], algebra_true[reordering], 
+        algebra_false[reordering], algebra_meaningless[reordering], 
+        topo_true[reordering], topo_false[reordering], topo_meaningless[reordering], 
+        geo_true[reordering], geo_false[reordering], geo_meaningless[reordering], 
+        nonmath_true[reordering], nonmath_false[reordering], 
+        nonmath_meaningless[reordering], analyse_meaningful[reordering], 
+        algebra_meaningful[reordering], topo_meaningful[reordering], 
+        geo_meaningful[reordering], nonmath_meaningful[reordering], 
+        math_intuitive[reordering], math_nonintuitive[reordering], 
+        math_imagery[reordering], math_nonimagery[reordering])
+                               
     contrasts = {}
     audio = np.array([name[-4:] == 'reg1' for name in names_], np.float)
     contrasts['audio'] = audio / audio.sum()
@@ -80,8 +196,113 @@ def audiosentence_contrasts(names_, ratings, n_session):
                           np.float)
     contrasts['reflection'] = reflection / reflection.sum()
     
-    contrasts['true-false'] = np.zeros(len(names_))
-    contrasts['true-false'][:n_reg] = vrai * faux.sum() - faux * vrai.sum()
+    
+    contrasts['analyse_true - rest'] = np.zeros(len(names_))    
+    contrasts['analyse_true - rest'][:n_reg] = analyse_true
+
+    contrasts['analyse_false - rest'] = np.zeros(len(names_))
+    contrasts['analyse_false - rest'][:n_reg] = analyse_false
+
+    contrasts['analyse_meaningless - rest'] = np.zeros(len(names_))
+    contrasts['analyse_meaningless - rest'][:n_reg] = analyse_meaningless
+    
+    contrasts['algebra_true - rest'] = np.zeros(len(names_))
+    contrasts['algebra_true - rest'][:n_reg] = algebra_true
+
+    contrasts['algebra_false - rest'] = np.zeros(len(names_))
+    contrasts['algebra_false - rest'][:n_reg] = algebra_false
+
+    contrasts['algebra_meaningless - rest'] = np.zeros(len(names_))
+    contrasts['algebra_meaningless - rest'][:n_reg] = algebra_meaningless
+
+    contrasts['topo_true - rest'] = np.zeros(len(names_))
+    contrasts['topo_true - rest'][:n_reg] = topo_true
+
+    contrasts['topo_false - rest'] = np.zeros(len(names_))
+    contrasts['topo_false - rest'][:n_reg] = topo_false
+
+    contrasts['topo_meaningless - rest'] = np.zeros(len(names_))
+    contrasts['topo_meaningless - rest'][:n_reg] = topo_meaningless
+
+    contrasts['geo_true - rest'] = np.zeros(len(names_))
+    contrasts['geo_true - rest'][:n_reg] = geo_true
+
+    contrasts['geo_false - rest'] = np.zeros(len(names_))
+    contrasts['geo_false - rest'][:n_reg] = geo_false
+
+    contrasts['geo_meaningless - rest'] = np.zeros(len(names_))
+    contrasts['geo_meaningless - rest'][:n_reg] = geo_meaningless
+
+    contrasts['non_math_true - rest'] = np.zeros(len(names_))
+    contrasts['non_math_true - rest'][:n_reg] = nonmath_true
+
+    contrasts['non_math_false - rest'] = np.zeros(len(names_))
+    contrasts['non_math_false - rest'][:n_reg] = nonmath_false
+
+    contrasts['non_math_meaningless - rest'] = np.zeros(len(names_))
+    contrasts['non_math_meaningless - rest'][:n_reg] = nonmath_meaningless
+    
+    contrasts['math_intuitive'] = np.zeros(len(names_))
+    contrasts['math_intuitive'][:n_reg] = math_intuitive
+    
+    contrasts['math_nonintuitive'] = np.zeros(len(names_))
+    contrasts['math_nonintuitive'][:n_reg] = math_nonintuitive
+    
+    contrasts['math_imagery'] = np.zeros(len(names_))
+    contrasts['math_imagery'][:n_reg] = math_imagery
+    
+    contrasts['math_nonimagery'] = np.zeros(len(names_))
+    contrasts['math_nonimagery'][:n_reg] = math_nonimagery
+    
+    contrasts['math - nonmath'] = np.zeros(len(names_))    
+    contrasts['math - nonmath'][:n_reg] = math*language.sum() - math.sum()*language
+    
+    contrasts['nonmath - math'] = np.zeros(len(names_))
+    contrasts['nonmath - math'][:n_reg] = math.sum()*language - language.sum()*math
+    
+    contrasts['math_meaningful - math_meaningless'] = np.zeros(len(names_))
+    contrasts['math_meaningful - math_meaningless'][:n_reg] = math_meaningless.sum()*math_meaningful - math_meaningful.sum()*math_meaningless
+    
+    contrasts['nonmath_meaningful - nonmath_meaningless'] = np.zeros(len(names_))
+    contrasts['nonmath_meaningful - nonmath_meaningless'][:n_reg] = nonmath_meaningless.sum()*nonmath_meaningful - nonmath_meaningful.sum()*nonmath_meaningless
+    
+    contrasts['analyse_meaningful - othermath'] = np.zeros(len(names_))
+    bigsum = algebra_meaningful + topo_meaningful + geo_meaningful
+    contrasts['analyse_meaningful - othermath'][:n_reg] = bigsum.sum()*analyse_meaningful - analyse_meaningful.sum()*(algebra_meaningful + topo_meaningful + geo_meaningful)
+    
+    contrasts['algebra_meaningful - othermath'] = np.zeros(len(names_))
+    bigsum = analyse_meaningful + topo_meaningful + geo_meaningful
+    contrasts['algebra_meaningful - othermath'][:n_reg] = bigsum.sum()*algebra_meaningful - sum(algebra_meaningful)*(analyse_meaningful + topo_meaningful + geo_meaningful)
+    
+    contrasts['topo_meaningful - othermath'] = np.zeros(len(names_))
+    bigsum = analyse_meaningful + algebra_meaningful + geo_meaningful
+    contrasts['topo_meaningful - othermath'][:n_reg] = bigsum.sum()*topo_meaningful - topo_meaningful.sum()*(analyse_meaningful + algebra_meaningful + geo_meaningful)
+    
+    contrasts['geo_meaningful - othermath'] = np.zeros(len(names_))
+    bigsum = analyse_meaningful + algebra_meaningful + topo_meaningful
+    contrasts['geo_meaningful - othermath'][:n_reg] = bigsum.sum()*geo_meaningful - geo_meaningful.sum()*(analyse_meaningful + algebra_meaningful + topo_meaningful)
+    
+    contrasts['true -false'] = np.zeros(len(names_))
+    contrasts['true -false'][:n_reg] = vrai*faux.sum() - vrai.sum()*faux
+    
+    contrasts['mathtrue - mathfalse'] = np.zeros(len(names_))
+    contrasts['mathtrue - mathfalse'][:n_reg] = math_false.sum()*math_true - math_true.sum()*math_false
+    
+    contrasts['nonmathtrue - nonmathfalse'] = np.zeros(len(names_))
+    contrasts['nonmathtrue - nonmathfalse'][:n_reg] = nonmath_false.sum()*nonmath_true - nonmath_true.sum()*nonmath_false
+    
+    
+#    i_con = i_con + 1;
+#    matlabbatch{i_subj}.spm.stats.con.consess{i_con}.fcon.name = 'F test on 4 categories of math ';
+#    matlabbatch{i_subj}.spm.stats.con.consess{i_con}.fcon.convec = { [ 
+#        analyse_meaningful - math_meaningful;
+#        algebra_meaningful - math_meaningful;
+#        topo_meaningful - math_meaningful;
+#        geo_meaningful - math_meaningful;
+#        ] };
+   
+#    contrasts['true-false'] = np.zeros(len(names_))
+#    contrasts['true-false'][:n_reg] = vrai * faux.sum() - faux * vrai.sum()
     return contrasts
 
 
@@ -131,7 +352,7 @@ def make_mask(fmri_files):
     return mask_img
 
 
-def formatted_matrix(boolean, understood_level, intuition_level,
+def formatted_matrix(ind_mod, understood_level, intuition_level,
                      immediacy_level, visual_imagery_level, mode):
     """ 
     Attempt to translate the formatted_matrix_v2 matlab function
@@ -146,7 +367,7 @@ def formatted_matrix(boolean, understood_level, intuition_level,
     n_sessions = 6
     n_reg = 39
     n_total = n_reg * n_sessions
-
+	
     cond = np.zeros(n_total)
     positive_intuitive_cond = np.zeros(n_total)
     negative_intuitive_cond = np.zeros(n_total)
@@ -154,21 +375,19 @@ def formatted_matrix(boolean, understood_level, intuition_level,
     negative_visu_cond = np.zeros(n_total)
     
     # load data corresponding to the boolean condition "boolean"
-    understood_level_cond = understood_level[boolean]
-    intuition_level_cond = intuition_level[boolean]
-    immediacy_level_cond = immediacy_level[boolean]
-    visual_imagery_level_cond = visual_imagery_level[boolean]
-    
-    # indexes de 1 to 15 les indices des phrases correspondant au boolean 
-    indices_for_boolean_condition = np.where(boolean)[0]
-    indices_for_boolean_condition_understood = indices_for_boolean_condition[
-        understood_level_cond != 0]
+    understood_level_cond = understood_level[ind_mod]
+    a = [x for x in range(len(understood_level_cond)) if understood_level_cond[x] != 0]
+    indices_for_boolean_condition_understood = [ind_mod[x] for x in a]
+    intuition_level_cond = intuition_level[ind_mod]
+    immediacy_level_cond = immediacy_level[ind_mod]
+    visual_imagery_level_cond = visual_imagery_level[ind_mod]
     
     # remove not understood sentences
-    intuition_understood = intuition_level_cond[understood_level_cond != 0]
-    visual_imagery_understood = visual_imagery_level_cond[
-        understood_level_cond != 0]
-    immediacy_understood = immediacy_level_cond[understood_level_cond != 0]
+    if understood_level.sum() > 20:
+        intuition_understood = intuition_level_cond[understood_level_cond != 0]
+        visual_imagery_understood = visual_imagery_level_cond[
+            understood_level_cond != 0]
+        immediacy_understood = immediacy_level_cond[understood_level_cond != 0]
     
     # also remove all immediate responses from the intuition analysis:
     intuition_understood_non_immediate = intuition_understood[
@@ -185,105 +404,187 @@ def formatted_matrix(boolean, understood_level, intuition_level,
 
     for i_sentence in range(n_sentences):
         if mode == 1:
-            i_regressor = 2 * i_sentence + 9 * np.floor((i_sentence - 1) / n_conds)
+            i_regressor = 2 * i_sentence + 9 * np.floor(i_sentence / n_conds)
         elif mode == 2:
             i_regressor = 2 * i_sentence + 1 + (
-                9 * np.floor((i_sentence - 1) / n_conds))
+                9 * np.floor(i_sentence / n_conds))
         if i_sentence in indices_for_boolean_condition_understood:
             cond[i_regressor] = 1
-            if i_sentence in indices_for_boolean_condition_understood[immediacy_understood != 1]:
-                positive_intuitive_cond[i_regressor] =\
-                    intuition_level[i_sentence] - positive_mean_int
-                negative_intuitive_cond[i_regressor] =\
-                    7 - intuition_level[i_sentence] - negative_mean_int
-                positive_visu_cond[i_regressor] =\
-                    visual_imagery_level[i_sentence] - positive_mean_visu
-                negative_visu_cond[i_regressor] = 7 -\
-                    visual_imagery_level[i_sentence] - negative_mean_visu
+            ##if i_sentence in indices_for_boolean_condition_understood[immediacy_understood != 1]:  ## immediacy not removed
+            positive_intuitive_cond[i_regressor] =\
+                intuition_level[i_sentence] - positive_mean_int
+            negative_intuitive_cond[i_regressor] =\
+                7 - intuition_level[i_sentence] - negative_mean_int
+            positive_visu_cond[i_regressor] =\
+                visual_imagery_level[i_sentence] - positive_mean_visu
+            negative_visu_cond[i_regressor] = 7 -\
+                visual_imagery_level[i_sentence] - negative_mean_visu
     return (cond, positive_intuitive_cond, negative_intuitive_cond, 
             positive_visu_cond, negative_visu_cond)
 
 
-
-
-def define_contrast_audiosentence(response_questionnaire, correspondence):
-    """
-    """
-    # read 4 variables in reponse_questionnaire
-    understood_level = response_questionnaire[:, 1]
-    intuition_level = 7 - response_questionnaire[:, 4]
-    immediacy_level = response_questionnaire[:, 5]
-    visual_imagery_level = response_questionnaire[:, 6]
+def define_contrast_audiosentence(final_data):
     
-    # define types
+    fd = loadmat(final_data)
+    response_questionnaire = fd['response_questionnaire']
+    correspondence = fd['correspondance_final']	
+
+    # read 4 variables in reponse_questionnaire
+    understood = response_questionnaire[:, 1]
+    intuition = 7 - response_questionnaire[:, 4]
+    immediacy = response_questionnaire[:, 5]
+    visual_imagery = response_questionnaire[:, 6]
+	
+	# define types
     sentence_type = np.mod(correspondence[:,1], 15) 
     # number in [0;14] for the 15 different types
-    value_type = np.mod(sentence_type, 3)
-    # number in [0;2] for the 3 different values of truth
+    	
+    n_sentences = 90
     
-    mode = 2
+    understood_level = np.zeros(n_sentences)
+    immediacy_level = np.zeros(n_sentences)
+    intuition_level = np.zeros(n_sentences)
+    visual_imagery_level = np.zeros(n_sentences)
+	
+    for i_stim in range(15):
+        ind = np.where(sentence_type == i_stim)[0]
+        if i_stim == 0: 
+		indices = [x + 14 for x in [0, 15, 30, 45, 60, 75]]
+        else:
+		indices = [x + i_stim - 1 for x in [0, 15, 30, 45, 60, 75]]
+		
+        for x in range(len(indices)):
+            understood_level[indices[x]] = understood[ind[x]]
+            intuition_level[indices[x]] = intuition[ind[x]]
+            immediacy_level[indices[x]] = immediacy[ind[x]]
+            visual_imagery_level[indices[x]] = visual_imagery[ind[x]]
+	
+	mode = 2
+	
+	#true:
+    ind_mod = range(0,90,3)
     (vrai, positive_intuitive_vrai, negative_intuitive_vrai,
-     positive_visu_vrai,negative_visu_vrai) = formatted_matrix(
-        value_type == 1, understood_level, intuition_level, immediacy_level,
+    positive_visu_vrai,negative_visu_vrai) = formatted_matrix(
+        ind_mod, understood_level, intuition_level, immediacy_level,
         visual_imagery_level, mode)
-
-    (faux, positive_intuitive_faux, negative_intuitive_faux,
-     positive_visu_faux, negative_visu_faux) = formatted_matrix(
-        value_type == 2, understood_level, intuition_level, immediacy_level,
-        visual_imagery_level, mode)
-
-    (meaningless, positive_intuitive_meaningless,
-     negative_intuitive_meaningless, positive_visu_meaningless,
-     negative_visu_meaningless) = formatted_matrix(
-        value_type == 0, understood_level, intuition_level, immediacy_level,
-        visual_imagery_level, mode)
-
-    # FXME: should be: 
-    vrai = np.array([
-        0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
-        1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-    faux = np.array([
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
-        0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
-        1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-    meaningless = np.array([
-        0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-        1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	
+	#false:
+    ind_mod = range(1,90,3)
+    (faux,positive_intuitive_faux,negative_intuitive_faux,
+     positive_visu_faux,negative_visu_faux) = formatted_matrix(
+		ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+		
+	#meaningless:
+    ind_mod = range(2,90,3)
+    (meaningless,positive_intuitive_meaningless,negative_intuitive_meaningless,
+     positive_visu_meaningless,negative_visu_meaningless) = formatted_matrix(
+		ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
     
-    return vrai, faux, meaningless
+	#analyse:
+    ind_mod = np.reshape([range(0+x,3+x) for x in [0,15,30,45,60,75]],(1,18))[0]
+    (analyse,positive_intuitive_analyse,negative_intuitive_analyse,
+    positive_visu_analyse,negative_visu_analyse) = formatted_matrix(
+         ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+		 
+	#algebra:	 
+    ind_mod = np.reshape([range(3+x,6+x) for x in [0,15,30,45,60,75]],(1,18))[0]
+    (algebra,positive_intuitive_algebra,negative_intuitive_algebra,
+     positive_visu_algebra,negative_visu_algebra) = formatted_matrix(
+         ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+	
+	
+    #topo:
+    ind_mod = np.reshape([range(6+x,9+x) for x in [0,15,30,45,60,75]],(1,18))[0]
+    (topo,positive_intuitive_topo,negative_intuitive_topo,
+     positive_visu_topo,negative_visu_topo) = formatted_matrix(
+         ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+	
+	#geo:
+    ind_mod = np.reshape([range(9+x,12+x) for x in [0,15,30,45,60,75]],(1,18))[0]
+    (geo,positive_intuitive_geo,negative_intuitive_geo,
+     positive_visu_geo,negative_visu_geo) = formatted_matrix(
+         ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+		 
+	#nonmath:
+    ind_mod = np.reshape([range(12+x,15+x) for x in [0,15,30,45,60,75]],(1,18))[0]
+    (nonmath,positive_intuitive_nonmath,negative_intuitive_nonmath,
+     positive_visu_nonmath,negative_visu_nonmath) = formatted_matrix(
+         ind_mod,understood_level,intuition_level,immediacy_level,visual_imagery_level,mode)
+		     
+    # Combined vectors:
+    meaningful = vrai + faux
+    math = analyse + algebra + topo + geo
+    
+    math_true = map(operator.mul, math, vrai)
+    math_false = map(operator.mul, math, faux)
+    math_meaningful = map(operator.mul, math, meaningful)
+    math_meaningless = map(operator.mul, math, meaningless)
+	
+	# 15 categories elementaires modulated par la comprehension des phrases:
+    
+    analyse_true = map(operator.mul, analyse, vrai)
+    analyse_false = map(operator.mul, analyse, faux)
+    analyse_meaningless = map(operator.mul, analyse, meaningless)
+    algebra_true = map(operator.mul, algebra, vrai)
+    algebra_false = map(operator.mul, algebra, faux)
+    algebra_meaningless = map(operator.mul,algebra, meaningless)
+    topo_true = map(operator.mul, topo, vrai)
+    topo_false = map(operator.mul, topo, faux)
+    topo_meaningless = map(operator.mul, topo, meaningless)
+    geo_true = map(operator.mul,geo, vrai)
+    geo_false = map(operator.mul, geo, faux)
+    geo_meaningless = map(operator.mul, geo, meaningless)
+    nonmath_true = map(operator.mul, nonmath, vrai)
+    nonmath_false = map(operator.mul, nonmath, faux)
+    nonmath_meaningless = map(operator.mul, nonmath, meaningless)
+    
+    analyse_meaningful = map(operator.mul, analyse, meaningful)
+    algebra_meaningful = map(operator.mul, algebra, meaningful)
+    topo_meaningful = map(operator.mul, topo, meaningful)
+    geo_meaningful = map(operator.mul, geo, meaningful)
+    nonmath_meaningful = map(operator.mul, nonmath, meaningful)
+       
+    
+    analyse_meaningful = map(operator.mul, analyse, meaningful)
+    algebra_meaningful = map(operator.mul, algebra, meaningful)
+    topo_meaningful = map(operator.mul, topo, meaningful)
+    geo_meaningful = map(operator.mul, geo, meaningful)
+    nonmath_meaningful = map(operator.mul, nonmath, meaningful)
+       
+    # define other subcategories:
+    
+    math_intuitive = positive_intuitive_analyse + positive_intuitive_algebra + positive_intuitive_topo + positive_intuitive_geo
+    math_nonintuitive = negative_intuitive_analyse + negative_intuitive_algebra + negative_intuitive_topo + negative_intuitive_geo
+    math_imagery = positive_visu_analyse + positive_visu_algebra + positive_visu_topo + positive_visu_geo
+    math_nonimagery = negative_visu_analyse + negative_visu_algebra + negative_visu_topo + negative_visu_geo
+    
+ 
+    ratings = [vrai, faux, meaningless, meaningful, math, nonmath, math_true, math_false, math_meaningless, math_meaningful, 
+    analyse_true, analyse_false, analyse_meaningless, algebra_true, algebra_false, algebra_meaningless, topo_true,
+    topo_false, topo_meaningless, geo_true, geo_false, geo_meaningless, nonmath_true, nonmath_false, nonmath_meaningless,
+    analyse_meaningful, algebra_meaningful, topo_meaningful, geo_meaningful, nonmath_meaningful, math_intuitive, 
+    math_nonintuitive, math_imagery, math_nonimagery]    
+    
+    return ratings
 
 
 def make_ratings(final_data):
-    fd = loadmat(final_data)
-    response_questionnaire = fd['response_questionnaire']
-    correspondence = fd['correspondance_final']
-    vrai, faux, meaningless = define_contrast_audiosentence(
-        response_questionnaire, correspondence)
-    ratings = [vrai, faux, meaningless]
+    
+    (vrai, faux, meaningless, meaningful, math, language, math_true, math_false, math_meaningless, math_meaningful, 
+     analyse_true, analyse_false, analyse_meaningless, algebra_true, algebra_false, algebra_meaningless, topo_true, 
+     topo_false, topo_meaningless, geo_true, geo_false, geo_meaningless, nonmath_true, nonmath_false, nonmath_meaningless, 
+     analyse_meaningful, algebra_meaningful, topo_meaningful, geo_meaningful, nonmath_meaningful, math_intuitive, 
+     math_nonintuitive, math_imagery, math_nonimagery) = define_contrast_audiosentence(
+            final_data)
+            
+    ratings = [vrai, faux, meaningless, meaningful, math, language, math_true, math_false, math_meaningless, math_meaningful, 
+    analyse_true, analyse_false, analyse_meaningless, algebra_true, algebra_false, algebra_meaningless, topo_true,
+    topo_false, topo_meaningless, geo_true, geo_false, geo_meaningless, nonmath_true, nonmath_false, nonmath_meaningless,
+    analyse_meaningful, algebra_meaningful, topo_meaningful, geo_meaningful, nonmath_meaningful, math_intuitive, 
+    math_nonintuitive, math_imagery, math_nonimagery]
+    
     return ratings
+
 
 def localizer_paradigm():
     """ Set up the paradigm for the parietal task """
@@ -350,7 +651,7 @@ def localizer_contrasts(dmtx):
     contrasts["left-right"] = contrasts["left"] - contrasts["right"]
     contrasts["right-left"] = contrasts["right"] - contrasts["left"]
     contrasts['motor-cognitive'] = contrasts["left"] + contrasts["right"] -\
-        contrasts["computation"] - contrasts["sentences"]
+    contrasts["computation"] - contrasts["sentences"]
     contrasts["audio-video"] = contrasts["loc_audio"] - contrasts["loc_video"]
     contrasts["video-audio"] = contrasts["loc_video"] - contrasts["loc_audio"]
     contrasts["computation-sentences"] = contrasts["computation"] -  \
@@ -393,10 +694,57 @@ def visualcategs_dmtx(onset_file, motion_file, n_scans, tr):
 
 def visualcategs_contrasts(names):
     contrasts = {}
+    contrasts['bodies-rest'] = np.array([name=='body' for name in names]).astype(float)   
+    contrasts['math-rest'] = np.array([name=='eq' for name in names]).astype(float)
+    contrasts['houses-rest'] = np.array([name=='maison' for name in names]).astype(float)
+    contrasts['words-rest'] = np.array([name=='mot' for name in names]).astype(float)   
+    contrasts['numbers-rest'] = np.array([name=='nb' for name in names]).astype(float)
+    contrasts['tools-rest'] = np.array([name=='outils' for name in names]).astype(float)
+    contrasts['faces-rest'] = np.array([name=='visage' for name in names]).astype(float)
+    contrasts['checkers-rest'] = np.array([name=='CheckerBoard' for name in names]).astype(float)
+    
+#    al = (np.array([name=='body' for name in names]) + np.array([name=='eq' for name in names]) +\
+#        np.array([name=='maison' for name in names]) + np.array([name=='mot' for name in names]) +\
+#        np.array([name=='nb' for name in names]) + np.array([name=='outils' for name in names]) +\
+#        np.array([name=='visage' for name in names]) + np.array([name=='CheckerBoard' for name in names]))
+
+    al = (contrasts['bodies-rest'] + contrasts['math-rest'] + contrasts['houses-rest'] +\
+        contrasts['words-rest'] + contrasts['numbers-rest'] + contrasts['tools-rest'] +\
+        contrasts['faces-rest'] + contrasts['checkers-rest']) /8
+    
+    
     contrasts['symbols-rest'] = np.array(
-        [name in ['eq', 'mot', 'nb'] for name in names])
+        [name in ['eq', 'mot', 'nb'] for name in names]).astype(float)   
     contrasts['pictures-rest'] = np.array(
-        [name in ['outils', 'maison', 'body', 'visage'] for name in names])
+        [name in ['outils', 'maison', 'body', 'visage'] for name in names]).astype(float)   
     contrasts['symbols-pictures'] = contrasts['symbols-rest'] -\
         contrasts['pictures-rest']
+    contrasts['pictures-symbols'] = contrasts['pictures-rest'] -\
+        contrasts['symbols-rest']
+    
+    contrasts['bodies-others'] = contrasts['bodies-rest'] - al    
+    contrasts['math-others'] = contrasts['math-rest'] - al
+    contrasts['houses-others'] = contrasts['houses-rest'] - al
+    contrasts['words-others'] = contrasts['words-rest'] - al    
+    contrasts['numbers-others'] = contrasts['numbers-rest'] - al
+    contrasts['tools-others'] = contrasts['tools-rest'] - al
+    contrasts['faces-others'] = contrasts['faces-rest'] - al
+    contrasts['checkers-others'] = contrasts['checkers-rest'] - al
+    
+    contrasts['bodies-checkers'] = contrasts['bodies-rest'] - contrasts['checkers-rest']  
+    contrasts['math-checkers'] = contrasts['math-rest'] - contrasts['checkers-rest']  
+    contrasts['houses-checkers'] = contrasts['houses-rest'] - contrasts['checkers-rest']  
+    contrasts['words-checkers'] = contrasts['words-rest'] - contrasts['checkers-rest']      
+    contrasts['numbers-checkers'] = contrasts['numbers-rest'] - contrasts['checkers-rest']  
+    contrasts['tools-checkers'] = contrasts['tools-rest'] - contrasts['checkers-rest']  
+    contrasts['faces-checkers'] = contrasts['faces-rest'] - contrasts['checkers-rest']  
+    
+            
+        
+        
     return contrasts
+
+
+
+
+
