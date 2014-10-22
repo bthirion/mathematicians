@@ -22,7 +22,7 @@ from nipy.modalities.fmri.design_matrix import make_dmtx
 def audiosentence_paradigm(datfile, n_run):
 
     run_data = loadmat(datfile) 
-    n_trials = run_data['nb_trials'][0][0]  
+    n_trials = len(np.concatenate([x.ravel() for x in run_data['onsets'][0]]))
     correspondence = run_data['correspondance_final']
     sentence_type = np.mod(correspondence[:,1], 15) # number in [0;14] for the 15 different types
     session_indexes = np.arange(n_run * n_trials, (n_run + 1)* n_trials)

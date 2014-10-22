@@ -24,7 +24,7 @@ subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
             'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
             'll130242', 'el120268', 
             'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-            'mh120250', 'vb120409', 'jc130030', 'mk130199'][:1]
+            'mh120250', 'vb120409', 'jc130030', 'mk130199']
 
 work_dir = '/neurospin/tmp/mathematicians'
 spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
@@ -40,20 +40,25 @@ for subject in subjects:
     # necessary paths
     analysis_dir = os.path.join(spm_dir, subject, 'analyses')
     subject_dir = os.path.join(work_dir, subject)
+    if os.path.exists(subject_dir) == False:
+        os.mkdir(subject_dir)
     fmri_dir = os.path.join(subject_dir, 'fmri')
+    if os.path.exists(fmri_dir) == False:
+        os.mkdir(fmri_dir)
     result_dir = os.path.join(fmri_dir, 'results')
     if os.path.exists(result_dir) == False:
         os.mkdir(result_dir)
     memory = Memory(cachedir=os.path.join(fmri_dir, 'cache_dir'), verbose=0)
-    """
+    
     # audiosentence protocol
     # step 1: get the necessary files
+    spm_fmri_dir = os.path.join(spm_dir, subject, 'fMRI/audiosentence')
     onset_dir = os.path.join(analysis_dir, 'audiosentence')
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
-        os.path.join(spm_dir, subject, 'fMRI/audiosentence/rp*.txt'))
-    left_fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*_lh.gii'))
-    right_fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*_rh.gii'))
+        os.path.join(spm_fmri_dir, 'rp*.txt'))
+    left_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'aaudio*_lh.gii'))
+    right_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'aaudio*_rh.gii'))
     onset_files.sort()
     motion_files.sort()
     left_fmri_files.sort()
@@ -71,7 +76,7 @@ for subject in subjects:
             enumerate(zip(
             onset_files, motion_files, left_fmri_files, right_fmri_files)):
         # Create the design matrix
-        dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr)
+        dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr, i)
         ax = dmtx.show()
         ax.set_position([.05, .25, .9, .65])
         ax.set_title('Design matrix')
@@ -130,11 +135,11 @@ for subject in subjects:
             darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
         z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
-    """
+    
     #########################################################################
     # localizer protocol
     # get the necessary files
-    """
+    
     motion_file, = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
     left_fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*_lh.gii'))[0]
@@ -182,7 +187,7 @@ for subject in subjects:
             darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
         z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
-    """
+    
     #########################################################################
     # VisualCategs protocol
     # get the necessary files
