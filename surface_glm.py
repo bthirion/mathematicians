@@ -76,11 +76,11 @@ for subject in subjects:
             enumerate(zip(
             onset_files, motion_files, left_fmri_files, right_fmri_files)):
         # Create the design matrix
-        dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr, i)
+        dmtx = audiosentence_dmtx(final_data, motion_file, n_scans, tr, i)
         ax = dmtx.show()
         ax.set_position([.05, .25, .9, .65])
         ax.set_title('Design matrix')
-        session_contrasts = audiosentence_contrasts(dmtx.names, ratings, i)
+        session_contrasts = audiosentence_contrasts(dmtx.names, final_data, i)
         fmri_glm = GeneralLinearModel(dmtx.matrix)
 
         # left hemisphere
