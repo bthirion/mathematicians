@@ -19,12 +19,11 @@ from utils import (
     visualcategs_contrasts)
 from nibabel.gifti import read, write, GiftiDataArray, GiftiImage
 
-subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
-            'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
-            'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
-            'll130242', 'el120268', 
-            'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-            'mh120250', 'vb120409', 'jc130030', 'mk130199']
+subjects = ['cf120444','jl120341','lr120300','aa130114','aa130169','mk130199',
+            'jl130200','mp130263','rm130241','al130244','bm120103','ce130459',
+            'of140017','jf140025','cr140040','fm120345','hr120357','kg120369',
+            'mr120371','jc130030','ld130145','cf140022','jn140034','mv140024',
+            'tj140029','ap140030','af140169','pp140165','eb140248','gq140243']
 
 work_dir = '/neurospin/tmp/mathematicians'
 spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
@@ -135,15 +134,18 @@ for subject in subjects:
             darrays=[GiftiDataArray().from_array(z_map, intent='t test')])
         z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
-    
+
     #########################################################################
     # localizer protocol
     # get the necessary files
-    
+    spm_fmri_dir = os.path.join(spm_dir, subject, 'fMRI/localizer')
     motion_file, = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
-    left_fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*_lh.gii'))[0]
-    right_fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*_rh.gii'))[0]
+    left_fmri_file = glob.glob(
+        os.path.join(spm_fmri_dir, 'alocalizer*_lh.gii'))[0]
+    right_fmri_file = glob.glob(
+        os.path.join(spm_fmri_dir, 'alocalizer*_rh.gii'))[0]
+    
     n_scans = 205
 
     # Create the design matrix
@@ -191,7 +193,7 @@ for subject in subjects:
     #########################################################################
     # VisualCategs protocol
     # get the necessary files
-
+    spm_fmri_dir = os.path.join(spm_dir, subject, 'fMRI/visualcategs')
     onset_dir = os.path.join(analysis_dir, 'visualcategs')
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
@@ -202,9 +204,9 @@ for subject in subjects:
     fmri_files.sort()
 
     left_fmri_files = glob.glob(
-        os.path.join(fmri_dir, 'crvisu*_lh.gii'))
+        os.path.join(spm_fmri_dir, 'avisu*_lh.gii'))
     right_fmri_files = glob.glob(
-        os.path.join(fmri_dir, 'crvisu*_rh.gii'))
+        os.path.join(spm_fmri_dir, 'avisu*_rh.gii'))
     n_scans = 185
 
     lh_effects, lh_variances, rh_effects, rh_variances = {}, {}, {}, {}
