@@ -26,18 +26,19 @@ from nipy.modalities.fmri.glm import FMRILinearModel
 from utils import (
     audiosentence_paradigm, audiosentence_dmtx, audiosentence_contrasts,
     fixed_effects_img, make_mask, localizer_dmtx, localizer_contrasts,
-    visualcategs_dmtx, visualcategs_contrasts)
+    visualcategs_dmtx, visualcategs_contrasts, make_ratings)
 
-subjects = ['aa130114', 'jl120341', 'mp130263', 'aa130169', 'jl130200',
-            'mr120371', 'al130244', 'kg120369', 'nl120167', 'bm120103',
-            'ld130145',  'cb120288', 'ce130459', 'rm130241', 'cf120444', 
-            'll130242', 'el120268', 
-            'lr120300', 'tb120212', 'fm120345', 'vb120303', 'hr120357', 
-            'mh120250', 'vb120409', 'jc130030', 'mk130199'][:1]
+subjects = ['cf120444','jl120341','lr120300','aa130114','aa130169','mk130199',
+            'jl130200','mp130263','rm130241','al130244','bm120103','ce130459',
+            'of140017','jf140025','cr140040','fm120345','hr120357','kg120369',
+            'mr120371','jc130030','ld130145','cf140022','jn140034','mv140024',
+            'tj140029','ap140030','af140169','pp140165','eb140248','gq140243']
+subjects = subjects[:1]
 
 work_dir = '/neurospin/tmp/mathematicians'
 spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf', 
                        'mathematicians_Amalric_Dehaene2012/fMRI_data/')
+behavioral_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaene2012/behavioral_data/'
 
 # some fixed parameters
 tr = 1.5 # TR
@@ -46,19 +47,23 @@ for subject in subjects:
     # necessary paths
     analysis_dir = os.path.join(spm_dir, subject, 'analyses')
     subject_dir = os.path.join(work_dir, subject)
-    fmri_dir = os.path.join(subject_dir, 'fmri')
-    result_dir = os.path.join(fmri_dir, 'results')
+    fmri_dir = os.path.join(spm_dir, subject, 'fMRI')
+    result_dir = os.path.join(work_dir, subject, 'results')
     if os.path.exists(result_dir) == False:
         os.mkdir(result_dir)
     memory = Memory(cachedir=os.path.join(fmri_dir, 'cache_dir'), verbose=0)
 
     # audiosentence protocol
     # step 1: get the necessary files
+    final_data = os.path.join(behavioral_dir, subject,
+                               'finaldata_%s.mat' %subject)
+    ratings = make_ratings(final_data)
     onset_dir = os.path.join(analysis_dir, 'audiosentence')
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/audiosentence/rp*.txt'))
-    fmri_files = glob.glob(os.path.join(fmri_dir, 'craudio*.nii.gz'))
+    fmri_files = glob.glob(os.path.join(fmri_dir,
+                                        'audiosentence/waaudio*.nii'))
     onset_files.sort()
     motion_files.sort()
     fmri_files.sort()
@@ -70,20 +75,20 @@ for subject in subjects:
     make_mask = memory.cache(make_mask)
     mask = make_mask(fmri_files)
     save(mask, os.path.join(fmri_dir, 'mask.nii'))
-    """
-    effects = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
-    variances = {'visual':[], 'audio':[], 'reflection':[], 'motor':[]}
+    
     design_matrices = []
-    for (onset_file, motion_file, fmri_file) in zip(
-        onset_files, motion_files, fmri_files):
+    for i, (onset_file, motion_file, fmri_file) in enumerate(zip(
+            onset_files, motion_files, fmri_files)):
         # Create the design matrix
-        dmtx = audiosentence_dmtx(onset_file, motion_file, n_scans, tr)
-        ax = dmtx.show()
-        ax.set_position([.05, .25, .9, .65])
-        ax.set_title('Design matrix')
+        dmtx = audiosentence_dmtx(final_data, motion_file, n_scans, tr, i)
         design_matrices.append(dmtx.matrix)
-        session_contrasts = audiosentence_contrasts(dmtx.names)
-         
+        session_contrasts = audiosentence_contrasts(dmtx.names, final_data, i)
+        if i == 0:
+            effects = dict([(con_id, [])
+                            for con_id in session_contrasts.keys()])
+            variances = dict([(con_id, [])
+                            for con_id in session_contrasts.keys()])
+     
         # fit the GLM
         fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
         fmri_glm.fit(do_scaling=True, model='ar1')
@@ -105,22 +110,18 @@ for subject in subjects:
             effects[contrast_id], variances[contrast_id], mask)
         z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
         save(z_map, z_map_path)
-    """
     
     #########################################################################
     # localizer protocol
-    """
     # get the necessary files
     motion_file, = glob.glob(
-        os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
-    fmri_file = glob.glob(os.path.join(fmri_dir, 'crlocalizer*.nii.gz'))[0]
+        os.path.join(fmri_dir, 'localizer/rp*.txt'))
+    fmri_file = glob.glob(os.path.join(fmri_dir,
+                                       'localizer/walocalizer*.nii'))[0]
     n_scans = 205
 
     # Create the design matrix
     dmtx = localizer_dmtx(motion_file, n_scans, tr)
-    ax = dmtx.show()
-    ax.set_position([.05, .25, .9, .65])
-    ax.set_title('Design matrix')
     session_contrasts = localizer_contrasts(dmtx)
 
     fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
@@ -137,34 +138,32 @@ for subject in subjects:
         z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
         save(z_image, z_map_path)
     del fmri_glm
-    """
+
     #########################################################################
     # visualcategs protocol
     onset_dir = os.path.join(analysis_dir, 'visualcategs')
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
-        os.path.join(spm_dir, subject, 'fMRI/visualcategs/rp*.txt'))
-    fmri_files = glob.glob(os.path.join(fmri_dir, 'crvisu*.nii.gz'))
+        os.path.join(fmri_dir, 'visualcategs/rp*.txt'))
+    fmri_files = glob.glob(os.path.join(fmri_dir, 'visualcategs/wavisu*.nii'))
     onset_files.sort()
     motion_files.sort()
     fmri_files.sort()
     
     # scan times
     n_scans = 185
-    cnames = ['symbols-rest', 'pictures-rest', 'symbols-pictures']
-    effects = {key:[] for key in cnames}
-    variances = {key:[] for key in cnames}
     design_matrices = []
-    for (onset_file, motion_file, fmri_file) in zip(
-        onset_files, motion_files, fmri_files):
+    for i, (onset_file, motion_file, fmri_file) in enumerate(zip(
+        onset_files, motion_files, fmri_files)):
         # Create the design matrix
         dmtx = visualcategs_dmtx(onset_file, motion_file, n_scans, tr)
-        ax = dmtx.show()
-        ax.set_position([.05, .25, .9, .65])
-        ax.set_title('Design matrix')
         design_matrices.append(dmtx.matrix)
         session_contrasts = visualcategs_contrasts(dmtx.names)
-         
+        if i == 0:
+            effects = dict([(con_id, [])
+                            for con_id in session_contrasts.keys()])
+            variances = dict([(con_id, [])
+                              for con_id in session_contrasts.keys()])
         # fit the GLM
         fmri_glm = FMRILinearModel(fmri_file, dmtx.matrix, mask=mask)
         fmri_glm.fit(do_scaling=True, model='ar1')

@@ -339,7 +339,9 @@ def fixed_effects(contrasts, variances):
 
 def make_mask(fmri_files):
     """ Generate a mask from a set of fMRI files"""
-    from nipy.labs.mask import compute_mask
+    # from nipy.labs.mask import compute_mask
+    from nilearn.masking import compute_multi_epi_mask
+    """
     mean = None
     for fmri_file in fmri_files:
         if mean == None:
@@ -350,6 +352,8 @@ def make_mask(fmri_files):
 
     mask_img = Nifti1Image(compute_mask(mean, opening=3).astype(np.uint8),
                            affine)
+    """
+    mask_img = compute_multi_epi_mask(fmri_files)
     return mask_img
 
 

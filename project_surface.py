@@ -7,15 +7,11 @@ and use existing  atlases on the surface.
 
 Author: Bertrand Thirion, Marie Amalric, 2013--2014
 
-Note
-----
-First run: export SUBJECTS_DIR=''
 """
 import os
 import glob
 import commands
-# from nibabel import load, save, Nifti1Image
-import gzip
+from nipype.interfaces.freesurfer import BBRegister
 
 
 FWHM = 3.
@@ -35,6 +31,8 @@ spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf',
                        'mathematicians_Amalric_Dehaene2012/fMRI_data/')
 
 os.environ['SUBJECTS_DIR'] = ""
+
+do_bbr = True
 
 for subject in subjects:
     print "Subject :", subject
@@ -62,7 +60,18 @@ for subject in subjects:
     
 
     fs_dir = os.path.join(t1_dir, subject)
+    
+    mean_bold = glob.glob(
+        os.path.join(preproc_dir,'audiosentence/meanaaudio*.nii'))[0]
 
+    if do_bbr:
+        # use BBR registration to finesse the coregistration
+        os.environ['SUBJECTS_DIR'] = t1_dir
+        bbreg = BBRegister(subject_id=subject, source_file=mean_bold,
+                           init='header', contrast_type='t2')
+        bbreg.run()
+    
+    regheader = mean_bold[:-4] + '_bbreg_%s.dat' % subject
     # --------------------------------------------------------------------
     # run the projection using freesurfer
             
@@ -85,13 +94,13 @@ for subject in subjects:
         # run freesrufer command
         commands.getoutput(
             '$FREESURFER_HOME/bin/mri_vol2surf --src %s --o %s '\
-                '--out_type gii --regheader %s --hemi lh --projfrac 0.5'
-            % (fmri_session, left_fmri_tex, fs_dir))
+                '--out_type gii --srcreg %s --hemi lh --projfrac 0.5'
+            % (fmri_session, left_fmri_tex, regheader))
 
         plop = commands.getoutput(
             '$FREESURFER_HOME/bin/mri_vol2surf --src %s --o %s '\
-                '--out_type gii --regheader %s --hemi rh --projfrac 0.5'
-            % (fmri_session, right_fmri_tex, fs_dir))
+                '--out_type gii --srcreg %s --hemi rh --projfrac 0.5'
+            % (fmri_session, right_fmri_tex, regheader))
         
         # delete the nii file
         os.remove(fmri_file)
