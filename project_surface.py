@@ -32,7 +32,7 @@ spm_dir = os.path.join('/neurospin/unicog/protocols/IRMf',
 
 os.environ['SUBJECTS_DIR'] = ""
 
-do_bbr = True
+do_bbr = False
 
 for subject in subjects:
     print "Subject :", subject
@@ -64,9 +64,9 @@ for subject in subjects:
     mean_bold = glob.glob(
         os.path.join(preproc_dir,'audiosentence/meanaaudio*.nii'))[0]
 
+    os.environ['SUBJECTS_DIR'] = t1_dir
     if do_bbr:
         # use BBR registration to finesse the coregistration
-        os.environ['SUBJECTS_DIR'] = t1_dir
         bbreg = BBRegister(subject_id=subject, source_file=mean_bold,
                            init='header', contrast_type='t2')
         bbreg.run()
@@ -82,7 +82,7 @@ for subject in subjects:
         left_fmri_tex = fmri_session[:-7] + '_lh.gii' 
         right_fmri_tex = fmri_session[:-7] + '_rh.gii'
         print left_fmri_tex, right_fmri_tex
-
+        """
         # unzip the fMRI data
         fmri_file = fmri_session[:-3]
         f_in = open(fmri_session, 'rb')
@@ -104,4 +104,21 @@ for subject in subjects:
         
         # delete the nii file
         os.remove(fmri_file)
-     
+        """
+        left_smooth_fmri_tex = os.path.join(
+            os.path.dirname(left_fmri_tex),
+            's' + os.path.basename(left_fmri_tex))
+        right_smooth_fmri_tex = os.path.join(
+            os.path.dirname(right_fmri_tex),
+            's' + os.path.basename(right_fmri_tex))
+        
+        print commands.getoutput(
+            '$FREESURFER_HOME/bin/mri_surf2surf --srcsubject %s --srcsurfval '\
+                '%s --trgsurfval %s --trgsubject ico --trgicoorder 7  '\
+                '--hemi lh  --nsmooth-in 2' %
+            (subject, left_fmri_tex, left_smooth_fmri_tex))
+        print commands.getoutput(
+            '$FREESURFER_HOME/bin/mri_surf2surf --srcsubject %s --srcsurfval '\
+                '%s --trgsubject ico --trgsurfval %s --trgicoorder 7  '\
+                '--hemi rh  --nsmooth-in 2' %
+            (subject, right_fmri_tex, right_smooth_fmri_tex))

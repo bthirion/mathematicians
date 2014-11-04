@@ -51,7 +51,6 @@ def display(fun_dir, fs_dir, contrast):
     for hemisphere, mesh_file, curv_file in zip(['lh', 'rh'], meshes, curves):
         fun_file = os.path.join(fun_dir, '%s_z_map_%s.gii' % (
                 contrast, hemisphere))
-        print fun_file
         coords, triangles = mesh_file
         x, y, z = coords.T
 
@@ -63,6 +62,7 @@ def display(fun_dir, fs_dir, contrast):
         curv = freesurfer.read_morph_data(curv_file).astype(np.float)
         tex = np.array([darrays.data for darrays in 
                         read(fun_file).darrays]).ravel()
+        print fun_file, tex.min(), tex.max()
         name = ''
         cmin = -1
         cmax = 1
@@ -72,9 +72,11 @@ def display(fun_dir, fs_dir, contrast):
         func_mesh = mlab.pipeline.triangular_mesh_source(
             x, y, z, triangles, scalars=tex)
         thresh = mlab.pipeline.threshold(func_mesh, low=THRESHOLD)
-        mlab.pipeline.surface(thresh, colormap="hot", vmin=THRESHOLD, vmax=10)
+        mlab.pipeline.surface(thresh, colormap="hot", vmin=THRESHOLD, vmax=7)
 
 # plot individual images
 for contrast in contrasts:
     display(os.path.join(fun_work_dir, subject, 'fmri/results'),
-            os.path.join(work_dir, subject, 't1', subject, 'surf'), contrast)
+            os.path.join(fs_dir), contrast)
+    #display(os.path.join(fun_work_dir, subject, 'fmri/results'),
+    #        os.path.join(work_dir, subject, 't1', subject, 'surf'), contrast)

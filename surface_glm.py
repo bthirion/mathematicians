@@ -56,8 +56,8 @@ for subject in subjects:
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
         os.path.join(spm_fmri_dir, 'rp*.txt'))
-    left_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'aaudio*_lh.gii'))
-    right_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'aaudio*_rh.gii'))
+    left_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'saaudio*_lh.gii'))
+    right_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'saaudio*_rh.gii'))
     onset_files.sort()
     motion_files.sort()
     left_fmri_files.sort()
@@ -142,9 +142,9 @@ for subject in subjects:
     motion_file, = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
     left_fmri_file = glob.glob(
-        os.path.join(spm_fmri_dir, 'alocalizer*_lh.gii'))[0]
+        os.path.join(spm_fmri_dir, 'salocalizer*_lh.gii'))[0]
     right_fmri_file = glob.glob(
-        os.path.join(spm_fmri_dir, 'alocalizer*_rh.gii'))[0]
+        os.path.join(spm_fmri_dir, 'salocalizer*_rh.gii'))[0]
     
     n_scans = 205
 
@@ -204,9 +204,9 @@ for subject in subjects:
     fmri_files.sort()
 
     left_fmri_files = glob.glob(
-        os.path.join(spm_fmri_dir, 'avisu*_lh.gii'))
+        os.path.join(spm_fmri_dir, 'savisu*_lh.gii'))
     right_fmri_files = glob.glob(
-        os.path.join(spm_fmri_dir, 'avisu*_rh.gii'))
+        os.path.join(spm_fmri_dir, 'savisu*_rh.gii'))
     n_scans = 185
 
     lh_effects, lh_variances, rh_effects, rh_variances = {}, {}, {}, {}
