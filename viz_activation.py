@@ -30,7 +30,7 @@ os.environ['SUBJECTS_DIR'] = ""
 
 fun_work_dir = '/neurospin/tmp/mathematicians'
 contrasts = ['faces-others', 'audio-video', 'checkers-others',
-             'geo_false - rest']
+             'math - nonmath', 'math-others', 'math-rest']
 THRESHOLD = 3.
 
 if 0:
@@ -74,9 +74,29 @@ def display(fun_dir, fs_dir, contrast):
         thresh = mlab.pipeline.threshold(func_mesh, low=THRESHOLD)
         mlab.pipeline.surface(thresh, colormap="hot", vmin=THRESHOLD, vmax=7)
 
+"""
 # plot individual images
 for contrast in contrasts:
     display(os.path.join(fun_work_dir, subject, 'fmri/results'),
-            os.path.join(fs_dir), contrast)
-    #display(os.path.join(fun_work_dir, subject, 'fmri/results'),
-    #        os.path.join(work_dir, subject, 't1', subject, 'surf'), contrast)
+            fs_dir, contrast)
+"""
+
+from scipy.stats import ttest_1samp
+from nibabel.gifti import read, write, GiftiDataArray, GiftiImage
+write_dir='/tmp'
+
+for contrast in contrasts:
+    for side in ['lh', 'rh']:
+        stat_img = [os.path.join(fun_work_dir, subject, 'fmri/results',
+                                 '%s_z_map_%s.gii' % (contrast, side))
+                    for subject in subjects]
+        X = np.array([np.asarray(read(simg).darrays[0].data)
+                      for simg in stat_img])
+        t_vals, _ = ttest_1samp(X, 0)
+        stat_texture = GiftiImage(darrays=[
+                    GiftiDataArray().from_array(t_vals, intent='z score')])
+        stat_path = os.path.join(write_dir, '%s_z_map_%s.gii' %
+                                 (contrast, side))
+        write(stat_texture, stat_path)
+
+    display(write_dir, fs_dir, contrast)
