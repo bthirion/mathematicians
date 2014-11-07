@@ -12,7 +12,7 @@ import os
 import glob
 import commands
 from nipype.interfaces.freesurfer import BBRegister
-
+from joblib import Parallel, delayed
 
 FWHM = 3.
 
@@ -34,7 +34,7 @@ os.environ['SUBJECTS_DIR'] = ""
 
 do_bbr = False
 
-for subject in subjects:
+def do_process_subject(subject):
     print "Subject :", subject
     subject_dir = os.path.join(work_dir, subject)
     t1_dir = os.path.join(subject_dir, 't1')
@@ -44,17 +44,17 @@ for subject in subjects:
     # warning: we are globing non-relaigned, non-coregistered data
     # this may lead to poor results
     fmri_images_ = glob.glob(
-        os.path.join(preproc_dir,'visualcategs/avisu*.nii'))
+        os.path.join(preproc_dir,'visualcategs/ravisu*.nii'))
     fmri_images_.sort()
     fmri_images = fmri_images_ 
 
     fmri_images_ = glob.glob(
-        os.path.join(preproc_dir,'audiosentence/aaudio*.nii'))
+        os.path.join(preproc_dir,'audiosentence/raaudio*.nii'))
     fmri_images_.sort()
     fmri_images += fmri_images_
 
     fmri_images_ = glob.glob(
-        os.path.join(preproc_dir,'localizer/alocalizer*.nii'))
+        os.path.join(preproc_dir,'localizer/ralocalizer*.nii'))
     fmri_images_.sort()
     fmri_images += fmri_images_
     
@@ -90,7 +90,7 @@ for subject in subjects:
         f_out.writelines(f_in)
         f_out.close()
         f_in.close()
-
+        """
         # run freesrufer command
         commands.getoutput(
             '$FREESURFER_HOME/bin/mri_vol2surf --src %s --o %s '\
@@ -103,8 +103,8 @@ for subject in subjects:
             % (fmri_session, right_fmri_tex, regheader))
         
         # delete the nii file
-        os.remove(fmri_file)
-        """
+        #os.remove(fmri_file)
+        
         left_smooth_fmri_tex = os.path.join(
             os.path.dirname(left_fmri_tex),
             's' + os.path.basename(left_fmri_tex))
@@ -122,3 +122,6 @@ for subject in subjects:
                 '%s --trgsubject ico --trgsurfval %s --trgicoorder 7  '\
                 '--hemi rh  --nsmooth-in 2' %
             (subject, right_fmri_tex, right_smooth_fmri_tex))
+
+Parallel(n_jobs=6)(delayed(do_process_subject)(
+            subject) for subject in subjects)

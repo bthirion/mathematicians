@@ -18,6 +18,7 @@ from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from nibabel import load, save, Nifti1Image
 from joblib import Memory
+from joblib import Parallel, delayed
 
 from nipy.modalities.fmri.experimental_paradigm import BlockParadigm
 from nipy.modalities.fmri.design_matrix import make_dmtx
@@ -43,7 +44,7 @@ behavioral_dir = '/neurospin/unicog/protocols/IRMf/mathematicians_Amalric_Dehaen
 # some fixed parameters
 tr = 1.5 # TR
     
-for subject in subjects:
+def run_glms(subject):
     # necessary paths
     analysis_dir = os.path.join(spm_dir, subject, 'analyses')
     subject_dir = os.path.join(work_dir, subject)
@@ -186,5 +187,5 @@ for subject in subjects:
         z_map_path = os.path.join(result_dir, '%s_z_map.nii' % contrast_id)
         save(z_map, z_map_path)
         
-    
-plt.show()
+
+Parallel(n_jobs=5)(delayed(run_glms)(subject) for subject in subjects)

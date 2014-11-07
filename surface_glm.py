@@ -10,6 +10,7 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Memory
+from joblib import Parallel, delayed
 
 from nipy.modalities.fmri.glm import GeneralLinearModel
 from utils import (
@@ -35,7 +36,7 @@ tr = 1.5 # TR
 
 contrast_names = []
 
-for subject in subjects:
+def run_glms(subject):
     # necessary paths
     analysis_dir = os.path.join(spm_dir, subject, 'analyses')
     subject_dir = os.path.join(work_dir, subject)
@@ -56,8 +57,8 @@ for subject in subjects:
     onset_files = glob.glob(os.path.join(onset_dir, 'onsetfile*.mat'))
     motion_files = glob.glob(
         os.path.join(spm_fmri_dir, 'rp*.txt'))
-    left_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'saaudio*_lh.gii'))
-    right_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'saaudio*_rh.gii'))
+    left_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'sraaudio*_lh.gii'))
+    right_fmri_files = glob.glob(os.path.join(spm_fmri_dir, 'sraaudio*_rh.gii'))
     onset_files.sort()
     motion_files.sort()
     left_fmri_files.sort()
@@ -142,9 +143,9 @@ for subject in subjects:
     motion_file, = glob.glob(
         os.path.join(spm_dir, subject, 'fMRI/localizer/rp*.txt'))
     left_fmri_file = glob.glob(
-        os.path.join(spm_fmri_dir, 'salocalizer*_lh.gii'))[0]
+        os.path.join(spm_fmri_dir, 'sralocalizer*_lh.gii'))[0]
     right_fmri_file = glob.glob(
-        os.path.join(spm_fmri_dir, 'salocalizer*_rh.gii'))[0]
+        os.path.join(spm_fmri_dir, 'sralocalizer*_rh.gii'))[0]
     
     n_scans = 205
 
@@ -204,9 +205,9 @@ for subject in subjects:
     fmri_files.sort()
 
     left_fmri_files = glob.glob(
-        os.path.join(spm_fmri_dir, 'savisu*_lh.gii'))
+        os.path.join(spm_fmri_dir, 'sravisu*_lh.gii'))
     right_fmri_files = glob.glob(
-        os.path.join(spm_fmri_dir, 'savisu*_rh.gii'))
+        os.path.join(spm_fmri_dir, 'sravisu*_rh.gii'))
     n_scans = 185
 
     lh_effects, lh_variances, rh_effects, rh_variances = {}, {}, {}, {}
@@ -275,4 +276,5 @@ for subject in subjects:
         z_map_path = os.path.join(result_dir, '%s_z_map_rh.gii' % contrast_id)
         write(z_texture, z_map_path)
 
-plt.show()
+
+Parallel(n_jobs=4)(delayed(run_glms)(subject) for subject in subjects)
